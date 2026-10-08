@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "gg-connect-db18a"
-  }
+  },
+  "targets": {
+    "gg-connect-db18a": {
+      "hosting": {
+        "parkaden": [
+          "gg-parkaden"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

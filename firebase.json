@@ -7,6 +7,26 @@
     "rules": "storage.rules",
     "bucket": "gg-connect-db18a-parkaden"
   },
+  "hosting": [
+    {
+      "target": "parkaden",
+      "public": "public-hosting",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "run": {
+            "serviceId": "parkaden-quest",
+            "region": "europe-west4"
+          }
+        }
+      ]
+    }
+  ],
   "apphosting": [
     {
       "backendId": "parkaden-quest",

@@ -62,9 +62,12 @@ npx firebase deploy --only firestore:rules,storage
 
 Backend **parkaden-quest** finns redan i `europe-west4`.
 
-Publik URL (efter första lyckade deploy):
+Publika URL:er:
 
-`https://parkaden-quest--gg-connect-db18a.europe-west4.hosted.app`
+- **Kort:** https://gg-parkaden.web.app
+- App Hosting: https://parkaden-quest--gg-connect-db18a.europe-west4.hosted.app
+
+`gg-parkaden.web.app` är Firebase Hosting som proxar till App Hosting (Cloud Run).
 
 1. Skapa ett GitHub-repo och pusha koden
 2. Firebase Console → App Hosting → **parkaden-quest** → koppla GitHub-repo + branch `main`
