@@ -7,18 +7,23 @@
     "rules": "storage.rules",
     "bucket": "gg-connect-db18a-parkaden"
   },
-  "apphosting": {
-    "backendId": "parkaden-quest",
-    "rootDir": ".",
-    "ignore": [
-      "node_modules",
-      ".git",
-      "firebase-debug.log",
-      "firebase-debug.*.log",
-      ".next",
-      "dist",
-      ".wrangler",
-      ".sites-runtime"
-    ]
-  }
+  "apphosting": [
+    {
+      "backendId": "parkaden-quest",
+      "rootDir": ".",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        ".next",
+        "dist",
+        ".wrangler",
+        ".sites-runtime",
+        "service-account.json",
+        ".env.local",
+        ".env*"
+      ]
+    }
+  ]
 }
