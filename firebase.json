@@ -1,0 +1,24 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules",
+    "bucket": "gg-connect-db18a-parkaden"
+  },
+  "apphosting": {
+    "backendId": "parkaden-quest",
+    "rootDir": ".",
+    "ignore": [
+      "node_modules",
+      ".git",
+      "firebase-debug.log",
+      "firebase-debug.*.log",
+      ".next",
+      "dist",
+      ".wrangler",
+      ".sites-runtime"
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+"use client";
+import { useCallback,useEffect,useState } from "react";
+import { getPlayer } from "./player-session";
+import { savePlayer } from "./player-session";
+import TeamChooser from "./TeamChooser";
+
+type Member={name:string;team:string;xp:number;updatedAt:string};
+type TeamData={player:{name:string;team:string;xp:number}|null;members:Member[]};
+
+export default function TeamPanel(){
+  const[data,setData]=useState<TeamData|null>(null),[loading,setLoading]=useState(true),[editOpen,setEditOpen]=useState(false),[choice,setChoice]=useState("Solo"),[saving,setSaving]=useState(false),[error,setError]=useState("");
+  const load=useCallback(async()=>{const p=getPlayer();if(!p){setData(null);setLoading(false);return}setLoading(true);try{const r=await fetch(`/api/player?token=${encodeURIComponent(p.token)}&includeTeam=1`,{cache:"no-store"});if(r.ok)setData(await r.json())}finally{setLoading(false)}},[]);
+  useEffect(()=>{load();window.addEventListener("player-ready",load);window.addEventListener("progress-updated",load);return()=>{window.removeEventListener("player-ready",load);window.removeEventListener("progress-updated",load)}},[load]);
+  if(loading)return <section className="panel team-panel team-loading">LADDAR LAGET…</section>;
+  if(!data?.player)return <section className="panel team-panel"><div><p className="eyebrow">MITT LAG</p><h2>Skapa din spelarprofil</h2><p>Du behöver en profil innan du kan se eller gå med i ett lag.</p><button className="primary" onClick={()=>window.dispatchEvent(new Event("open-player-profile"))}>SKAPA PROFIL</button></div></section>;
+  const solo=data.player.team==="Solo",members=data.members||[];
+  const openManager=()=>{setChoice(data.player?.team||"Solo");setError("");setEditOpen(true)};
+  const changeTeam=async()=>{const p=getPlayer();if(!p)return;setSaving(true);setError("");try{const r=await fetch("/api/teams",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:p.token,team:choice})}),body=await r.json();if(!r.ok)throw new Error(body.error||"Kunde inte byta lag");savePlayer(body.player);setEditOpen(false);await load();window.dispatchEvent(new Event("community-scan"))}catch(err){setError(err instanceof Error?err.message:"Kunde inte byta lag")}finally{setSaving(false)}};
+  return <><section className="panel team-panel"><div><p className="eyebrow">MITT LAG</p><h2>{solo?"Du spelar solo":data.player.team}</h2><p>{solo?"Du är inte med i något lag ännu. Sök efter ett befintligt lag eller skapa ett nytt.":`${members.length} ${members.length===1?"spelare":"spelare"} i laget. Lagets sammanlagda XP är ${members.reduce((sum,m)=>sum+m.xp,0).toLocaleString("sv-SE")}.`}</p><button className="primary" onClick={openManager}>{solo?"+ GÅ MED I ETT LAG":"BYT ELLER REDIGERA LAG"}</button></div><div className="members">{members.map((m,i)=><div key={m.name} className={m.name===data.player?.name?"current-member":""}><span className={`avatar big ${i%2?"alt":""}`}>{m.name.slice(0,1).toUpperCase()}</span><b>{m.name}{m.name===data.player?.name&&" · DU"}</b><small>{m.xp.toLocaleString("sv-SE")} XP · {m.team}</small></div>)}{!solo&&members.length<4&&Array.from({length:4-members.length},(_,i)=><div className="empty" key={`empty-${i}`}>LEDIG PLATS</div>)}</div></section>{editOpen&&<div className="modal-backdrop profile-backdrop" onClick={()=>setEditOpen(false)}><section className="profile-modal team-manager" onClick={e=>e.stopPropagation()}><button className="close" onClick={()=>setEditOpen(false)}>×</button><p className="eyebrow">LAGHANTERING</p><h2>Byt eller skapa lag</h2><p>Sök efter ett befintligt lag och gå med direkt, eller skriv ett nytt namn och skapa laget.</p><TeamChooser value={choice} onChange={setChoice}/>{error&&<div className="profile-error">{error}</div>}<button className="primary full" disabled={saving} onClick={changeTeam}>{saving?"SPARAR…":choice==="Solo"?"FORTSÄTT SOLO":choice===data.player.team?"BEHÅLL LAGET":`GÅ MED I ${choice.toUpperCase()}`}</button></section></div>}</>;
+}

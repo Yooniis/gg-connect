@@ -1,0 +1,9 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Served via /api/quest-image using Admin SDK.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

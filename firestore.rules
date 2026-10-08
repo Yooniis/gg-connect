@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // All app access goes through Next.js + Admin SDK.
+    // Clients must not read/write Firestore directly.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
