@@ -60,9 +60,16 @@ npx firebase deploy --only firestore:rules,storage
 
 ## 5. App Hosting-backend
 
-1. I Firebase Console → App Hosting → skapa backend (eller använd `backendId` i `firebase.json`: `parkaden-quest`)
-2. Koppla GitHub-repo **eller** deploya från lokal checkout enligt App Hosting-dokumentationen
-3. Säkerställ att build-kommandot är `npm run build` och start `npm run start` (standard för Next.js)
+Backend **parkaden-quest** finns redan i `europe-west4`.
+
+Publik URL (efter första lyckade deploy):
+
+`https://parkaden-quest--gg-connect-db18a.europe-west4.hosted.app`
+
+1. Skapa ett GitHub-repo och pusha koden
+2. Firebase Console → App Hosting → **parkaden-quest** → koppla GitHub-repo + branch `main`
+3. Secret `ADMIN_PIN` är redan satt; bucket i `apphosting.yaml` är `gg-connect-db18a-parkaden`
+4. Skapa rollout / låt automatisk deploy köra `npm run build`
 
 ## 6. Lokal utveckling
 
