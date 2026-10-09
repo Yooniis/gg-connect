@@ -54,21 +54,29 @@ export async function POST(request: Request) {
       }))
     : [];
 
-  const result = await completeQuest({
-    name,
-    team: identity.team,
-    questId,
-    title,
-    answers,
-    skipPuzzleCheck: Boolean(b.skipPuzzleCheck),
-  });
-  if (!result.ok) {
-    return Response.json({ error: result.error }, { status: result.status });
-  }
+  try {
+    const result = await completeQuest({
+      name,
+      team: identity.team,
+      questId,
+      title,
+      answers,
+      skipPuzzleCheck: Boolean(b.skipPuzzleCheck),
+    });
+    if (!result.ok) {
+      return Response.json({ error: result.error }, { status: result.status });
+    }
 
-  return Response.json({
-    awarded: result.awarded,
-    award: result.award,
-    ...(await progressSnapshot(name)),
-  });
+    return Response.json({
+      awarded: result.awarded,
+      award: result.award,
+      ...(await progressSnapshot(name)),
+    });
+  } catch (err) {
+    console.error("completeQuest failed", err);
+    return Response.json(
+      { error: err instanceof Error ? err.message : "Kunde inte spara Chip." },
+      { status: 500 },
+    );
+  }
 }

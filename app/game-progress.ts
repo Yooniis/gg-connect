@@ -24,8 +24,12 @@ export async function awardQuest(
       skipPuzzleCheck: Boolean(opts?.skipPuzzleCheck),
     }),
   });
-  const data = await r.json();
-  if (!r.ok) return { awarded: false, error: data.error || "Kunde inte spara" };
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const message = data.error || "Kunde inte spara Chip";
+    window.alert(message);
+    return { awarded: false, error: message };
+  }
   if (data.award) window.dispatchEvent(new CustomEvent("xp-awarded", { detail: data.award }));
   window.dispatchEvent(new Event("progress-updated"));
   window.dispatchEvent(new Event("community-scan"));

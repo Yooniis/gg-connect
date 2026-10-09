@@ -909,11 +909,17 @@ export async function completeQuest(input: {
   const xp = base + bonus;
 
   const completionRef = db().collection("questCompletions").doc(compositeKey(name, questId));
+  const playerRef = db().collection("players").doc(nameKey(name));
+  const communityRef = db().collection("communityState").doc("default");
   let awarded = false;
   await db().runTransaction(async (tx) => {
+    // Firestore requires all reads before any writes
     const existing = await tx.get(completionRef);
+    const playerSnap = await tx.get(playerRef);
+    const communitySnap = await tx.get(communityRef);
     if (existing.exists) return;
     awarded = true;
+    const currentXp = Number(playerSnap.data()?.xp || 0);
     tx.set(completionRef, {
       playerName: name,
       playerNameLower: nameKey(name),
@@ -922,16 +928,11 @@ export async function completeQuest(input: {
       xpAwarded: xp,
       completedAt: nowIso(),
     });
-    const playerRef = db().collection("players").doc(nameKey(name));
-    const playerSnap = await tx.get(playerRef);
-    const currentXp = Number(playerSnap.data()?.xp || 0);
     tx.set(
       playerRef,
       { name, team, xp: currentXp + xp, updatedAt: nowIso() },
       { merge: true },
     );
-    const communityRef = db().collection("communityState").doc("default");
-    const communitySnap = await tx.get(communityRef);
     tx.set(
       communityRef,
       {
@@ -1093,9 +1094,11 @@ export async function recordNfcScan(input: {
   let before = 0;
   let after = 0;
 
+  const playerRef = db().collection("players").doc(nameKey(name));
   await db().runTransaction(async (tx) => {
     const existing = await tx.get(scanRef);
     const community = await tx.get(communityRef);
+    const playerSnap = await tx.get(playerRef);
     before = Number(community.data()?.scans || 0);
     if (existing.exists) {
       after = before;
@@ -1115,8 +1118,6 @@ export async function recordNfcScan(input: {
       { scans: after, goal: Number(community.data()?.goal || 500), updatedAt: nowIso() },
       { merge: true },
     );
-    const playerRef = db().collection("players").doc(nameKey(name));
-    const playerSnap = await tx.get(playerRef);
     tx.set(
       playerRef,
       {
