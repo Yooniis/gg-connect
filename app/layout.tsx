@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   description: "Ett NFC-baserat livespel under Good Game LAN i Parkaden, Härnösand.",
   openGraph: {
     title: "Good Game: Parkaden Quest",
-    description: "Hitta signaler. Samla laget. Lös NFC-uppdragen.",
+    description: "Hitta signaler. Hjälp communityn. Lös NFC-uppdragen.",
     images: [{ url: "/gg-logo.png" }],
   },
   icons: {

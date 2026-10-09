@@ -13,7 +13,6 @@ import { acceptQuest as persistAcceptance, awardQuest } from "./game-progress";
 import XpAwardToast from "./XpAwardToast";
 import CompletionLock from "./CompletionLock";
 import PlayerOnboarding from "./PlayerOnboarding";
-import TeamPanel from "./TeamPanel";
 import { getPlayer } from "./player-session";
 
 type Tag = { id: string; name: string; stationKey: string; location: string };
@@ -81,7 +80,7 @@ function decorate(q: Quest, index: number): Quest {
 }
 
 export default function Home() {
-  const [tab, setTab] = useState<"quests" | "map" | "team">("quests");
+  const [tab, setTab] = useState<"quests" | "map">("quests");
   const [filter, setFilter] = useState("ALLA");
   const [quests, setQuests] = useState<Quest[]>([]);
   const [selected, setSelected] = useState<Quest | null>(null);
@@ -233,7 +232,7 @@ export default function Home() {
               <br />
               <em>spelplanen.</em>
             </h1>
-            <p className="lead">Hitta signaler. Samla laget. Lös uppdragen.</p>
+            <p className="lead">Hitta signaler. Hjälp communityn. Jaga XP-toppen.</p>
           </div>
           <PlayerXP />
         </section>
@@ -245,9 +244,6 @@ export default function Home() {
           </button>
           <button className={tab === "map" ? "active" : ""} onClick={() => setTab("map")}>
             Zoner
-          </button>
-          <button className={tab === "team" ? "active" : ""} onClick={() => setTab("team")}>
-            Mitt lag
           </button>
         </nav>
         {tab === "quests" && (
@@ -383,7 +379,6 @@ export default function Home() {
             </div>
           </section>
         )}
-        {tab === "team" && <TeamPanel />}
       </div>
       <div className="dynamic-feed-wrap">
         <LiveQuestFeed />

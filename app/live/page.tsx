@@ -186,7 +186,7 @@ export default function ProjectorLive() {
                 <b>{i + 1}</b>
                 <span>
                   <strong>{p.name}</strong>
-                  <small>{p.team}</small>
+                  <small>Community</small>
                 </span>
                 <em>
                   {p.xp.toLocaleString("sv-SE")} <small>XP</small>

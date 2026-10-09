@@ -47,11 +47,8 @@ export async function POST(request: Request) {
     .trim()
     .replace(/\s+/g, " ")
     .slice(0, 24);
-  const team =
-    String(b.team || "Solo")
-      .trim()
-      .replace(/\s+/g, " ")
-      .slice(0, 30) || "Solo";
+  // Teams are disabled — everyone belongs to the shared community.
+  const team = "Solo";
 
   if (token.length < 12 || name.length < 2) {
     return Response.json(
