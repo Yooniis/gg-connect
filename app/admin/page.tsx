@@ -4,6 +4,7 @@ import AdminLoginForm from "./login-form";
 import AdminLogoutButton from "./logout-button";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function AdminPage() {
   if (!adminConfigured()) {

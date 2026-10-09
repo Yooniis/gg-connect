@@ -1,6 +1,7 @@
+import { cookies } from "next/headers";
 import {
   adminConfigured,
-  createAdminCookieHeader,
+  createAdminCookieValue,
   verifyAdminPin,
 } from "@/lib/admin-session";
 
@@ -20,8 +21,18 @@ export async function POST(request: Request) {
     return Response.json({ error: "Fel admin-PIN." }, { status: 401 });
   }
 
+  const token = await createAdminCookieValue();
+  const jar = await cookies();
+  jar.set("__session", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30,
+  });
+
   return Response.json(
     { ok: true },
-    { headers: { "set-cookie": await createAdminCookieHeader() } },
+    { headers: { "cache-control": "private, no-store" } },
   );
 }

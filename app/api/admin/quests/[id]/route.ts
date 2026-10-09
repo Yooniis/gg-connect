@@ -17,19 +17,42 @@ export async function PATCH(
     "type",
     "description",
     "place",
+    "steps",
+    "puzzleSteps",
     "xp",
     "hintCost",
     "hintText",
     "startsAt",
     "endsAt",
     "status",
+    "tagIds",
+    "requireScan",
+    "unlockMetric",
+    "unlockAt",
+    "gameMode",
   ] as const;
 
   const changes: Record<string, unknown> = {};
   for (const key of allowed) {
-    if (key in body) {
+    if (!(key in body)) continue;
+    if (key === "startsAt" || key === "endsAt") {
+      changes[key] = body[key] || null;
+    } else if (key === "tagIds") {
+      changes[key] = Array.isArray(body[key]) ? body[key].map(String) : [];
+    } else if (key === "steps" || key === "puzzleSteps") {
       changes[key] =
-        body[key] || (key === "startsAt" || key === "endsAt" ? null : body[key]);
+        typeof body[key] === "string" ? body[key] : JSON.stringify(body[key] ?? []);
+    } else if (key === "requireScan") {
+      changes[key] = Boolean(body[key]);
+    } else if (key === "unlockAt") {
+      changes[key] = body[key] == null || body[key] === "" ? null : Number(body[key]);
+    } else if (key === "unlockMetric") {
+      changes[key] =
+        body[key] === "scans" || body[key] === "xp" || body[key] === "none"
+          ? body[key]
+          : null;
+    } else {
+      changes[key] = body[key];
     }
   }
 

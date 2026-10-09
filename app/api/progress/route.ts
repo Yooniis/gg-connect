@@ -36,19 +36,31 @@ export async function POST(request: Request) {
 
   if (b.action === "accept") {
     const result = await acceptQuest(name, questId);
+    if ("ok" in result && result.ok === false) {
+      return Response.json({ error: result.error }, { status: result.status });
+    }
     return Response.json({
       accepted: true,
-      startedNow: result.startedNow,
-      acceptance: result.acceptance,
+      startedNow: "startedNow" in result ? result.startedNow : false,
+      acceptance: "acceptance" in result ? result.acceptance : null,
       ...(await progressSnapshot(name)),
     });
   }
+
+  const answers = Array.isArray(b.answers)
+    ? b.answers.map((a: { stepId?: string; answer?: string }) => ({
+        stepId: String(a.stepId || ""),
+        answer: String(a.answer || ""),
+      }))
+    : [];
 
   const result = await completeQuest({
     name,
     team: identity.team,
     questId,
     title,
+    answers,
+    skipPuzzleCheck: Boolean(b.skipPuzzleCheck),
   });
   if (!result.ok) {
     return Response.json({ error: result.error }, { status: result.status });

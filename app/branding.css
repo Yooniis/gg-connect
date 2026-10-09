@@ -1,4 +1,189 @@
-:root{--brand-yellow:#ffdc42;--brand-orange:#ef883c;--brand-red:#df433e;--brand-gradient:linear-gradient(110deg,var(--brand-yellow),var(--brand-orange) 58%,var(--brand-red));--lime:var(--brand-yellow);--amber:var(--brand-orange);--pink:var(--brand-red);--violet:#e8683d;--cyan:#ffc64a}
-body{background:radial-gradient(circle at 80% 0%,#341a17 0,transparent 34rem),radial-gradient(circle at 0% 42%,#211a0d 0,transparent 28rem),var(--bg)}
-.brand{width:148px;height:52px;background:url('/good-game-logo.jpg') center/contain no-repeat}.brand>span{display:none}.eyebrow,.quest footer b{background:var(--brand-gradient);-webkit-background-clip:text;color:transparent}.brandmark{display:none}.live i{background:var(--brand-orange);box-shadow:0 0 12px var(--brand-orange)}.status-card h1 em{border-image:var(--brand-gradient);-webkit-text-stroke:1.5px var(--brand-yellow)}.level-ring{border-color:var(--brand-orange);box-shadow:0 0 20px #ef883c24}.progress i,.tabs button.active:after,.filters button.active,.primary,.scan-button{background:var(--brand-gradient)}.filters button.active{border-color:var(--brand-orange)}.quest.orange,.modal.orange{--accent:var(--brand-orange)}.quest.yellow,.modal.yellow{--accent:var(--brand-yellow)}.quest.red,.modal.red{--accent:var(--brand-red)}.quest:hover{box-shadow:0 10px 36px color-mix(in srgb,var(--accent) 14%,transparent)}.idea-section{display:none}.topbar{background:#08090df2}
-@media(max-width:760px){.brand{width:105px;height:46px}.topbar{padding-left:13px}}
+/* Good Game 2025 brand tokens – synced with goodgame.nu */
+:root {
+  --brand-red: #e33b3b;
+  --brand-red-hot: #ff5a4f;
+  --brand-red-soft: #ff8178;
+  --brand-red-deep: #971f27;
+  --brand-yellow: #ff8178;
+  --brand-orange: #e33b3b;
+  --brand-gradient: linear-gradient(110deg, var(--brand-red-deep), var(--brand-red) 55%, var(--brand-red-hot));
+  --brand-cta: linear-gradient(110deg, #971f27, #e23c3c);
+
+  --bg: #090b10;
+  --panel: #11151d;
+  --panel2: #171c26;
+  --ink: #f5f7fb;
+  --muted: #aab2c2;
+  --line: rgba(255, 255, 255, 0.1);
+
+  --lime: var(--brand-red);
+  --amber: var(--brand-red-hot);
+  --pink: var(--brand-red-soft);
+  --violet: #ff5a4f;
+  --cyan: #58d6ff;
+}
+
+body {
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 80% 0%, #3a1218 0, transparent 34rem),
+    radial-gradient(circle at 0% 42%, #1a1016 0, transparent 28rem),
+    var(--bg);
+}
+
+.brand {
+  width: 148px;
+  height: 52px;
+  background: url("/gg-logo.png") center / contain no-repeat;
+}
+.brand > span {
+  display: none;
+}
+.brandmark {
+  display: none;
+}
+
+/* Hero atmosphere from Good Game 2025 key art */
+.status-card {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  min-height: 220px;
+  background:
+    linear-gradient(105deg, rgba(9, 11, 16, 0.92) 18%, rgba(9, 11, 16, 0.55) 55%, rgba(9, 11, 16, 0.78)),
+    url("/head-bg.png") right center / cover no-repeat;
+  border-color: color-mix(in srgb, var(--brand-red) 28%, var(--line));
+}
+.status-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, transparent 40%, rgba(9, 11, 16, 0.55));
+  pointer-events: none;
+}
+.status-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.eyebrow,
+.quest footer b {
+  background: none;
+  -webkit-background-clip: unset;
+  color: var(--brand-red-soft);
+}
+
+.live i {
+  background: var(--brand-red);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--brand-red) 70%, transparent);
+}
+
+.status-card h1 em {
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--brand-red);
+  border-image: none;
+}
+
+.level-ring {
+  border-color: var(--brand-red);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--brand-red) 18%, transparent);
+}
+
+.progress i,
+.tabs button.active:after,
+.filters button.active,
+.primary,
+.scan-button {
+  background: var(--brand-cta);
+}
+
+.filters button.active {
+  border-color: var(--brand-red);
+  color: #fff;
+}
+
+.quest.orange,
+.modal.orange {
+  --accent: var(--brand-red);
+}
+.quest.yellow,
+.modal.yellow {
+  --accent: var(--brand-red-hot);
+}
+.quest.red,
+.modal.red {
+  --accent: var(--brand-red);
+}
+.quest.green,
+.modal.green {
+  --accent: var(--brand-red-soft);
+}
+
+.quest:hover {
+  box-shadow: 0 10px 36px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.idea-section {
+  display: none;
+}
+
+.topbar {
+  background: rgba(8, 10, 14, 0.92);
+  border-bottom-color: var(--line);
+}
+
+.admin-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+.admin-logo::before {
+  content: "";
+  display: block;
+  width: 92px;
+  height: 36px;
+  background: url("/gg-logo.png") center / contain no-repeat;
+  flex-shrink: 0;
+}
+
+.projector {
+  background:
+    linear-gradient(180deg, rgba(7, 8, 11, 0.78), rgba(7, 8, 11, 0.94)),
+    url("/head-bg.png") center / cover no-repeat,
+    #07080b;
+}
+
+.player-stats,
+.panel,
+.modal,
+.scan-modal,
+.quest {
+  border-color: var(--line);
+}
+
+.primary,
+.scan-button {
+  color: #fff;
+}
+
+.ghost {
+  color: var(--brand-red-soft);
+  border-color: color-mix(in srgb, var(--brand-red) 55%, transparent);
+}
+
+@media (max-width: 760px) {
+  .brand {
+    width: 105px;
+    height: 46px;
+  }
+  .topbar {
+    padding-left: 13px;
+  }
+  .status-card {
+    min-height: 200px;
+    background:
+      linear-gradient(180deg, rgba(9, 11, 16, 0.78), rgba(9, 11, 16, 0.92)),
+      url("/head-bg.png") center / cover no-repeat;
+  }
+}

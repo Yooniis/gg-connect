@@ -2,13 +2,21 @@ import { getAdminDb, getStorageBucket } from "./firebase-admin";
 import {
   Activity,
   BUILTIN_QUEST_REWARDS,
-  COMMUNITY_UNLOCKS,
+  CommunityUnlockRule,
+  DEFAULT_COMMUNITY_UNLOCKS,
+  DEFAULT_NFC_TAGS,
+  GameSettings,
+  NfcTag,
   Player,
   PlayerProfile,
+  PuzzleStep,
   Quest,
+  UnlockMetric,
   compositeKey,
   nameKey,
+  normalizeAnswer,
   nowIso,
+  parsePuzzleSteps,
 } from "./types";
 
 const DEFAULT_QUESTS = [
@@ -39,6 +47,18 @@ async function nextCounter(name: string, startAt = 1) {
 }
 
 function questFromDoc(id: number, data: Record<string, unknown>): Quest {
+  const tagIds = Array.isArray(data.tagIds)
+    ? data.tagIds.map(String)
+    : typeof data.tagIds === "string"
+      ? (() => {
+          try {
+            const parsed = JSON.parse(data.tagIds);
+            return Array.isArray(parsed) ? parsed.map(String) : [];
+          } catch {
+            return [];
+          }
+        })()
+      : [];
   return {
     id,
     sourceKey: (data.sourceKey as string | null | undefined) ?? null,
@@ -47,6 +67,7 @@ function questFromDoc(id: number, data: Record<string, unknown>): Quest {
     description: String(data.description || ""),
     place: String(data.place || ""),
     steps: String(data.steps || "[]"),
+    puzzleSteps: String(data.puzzleSteps || "[]"),
     xp: Number(data.xp || 0),
     hintCost: Number(data.hintCost || 0),
     hintText: String(data.hintText || ""),
@@ -54,24 +75,180 @@ function questFromDoc(id: number, data: Record<string, unknown>): Quest {
     startsAt: (data.startsAt as string | null | undefined) ?? null,
     endsAt: (data.endsAt as string | null | undefined) ?? null,
     status: String(data.status || "draft"),
+    tagIds,
+    requireScan: data.requireScan !== false,
+    unlockMetric: (data.unlockMetric as UnlockMetric | null | undefined) ?? null,
+    unlockAt: data.unlockAt == null ? null : Number(data.unlockAt),
+    gameMode: (data.gameMode as Quest["gameMode"]) ?? (id === 5 ? "silence" : id <= 10 ? "builtin" : "custom"),
     createdBy: data.createdBy as string | undefined,
     createdAt: data.createdAt as string | undefined,
     updatedAt: data.updatedAt as string | undefined,
   };
 }
 
+function tagFromDoc(id: string, data: Record<string, unknown>): NfcTag {
+  return {
+    id,
+    name: String(data.name || ""),
+    stationKey: String(data.stationKey || id),
+    location: String(data.location || ""),
+    active: data.active !== false,
+    createdAt: data.createdAt as string | undefined,
+    updatedAt: data.updatedAt as string | undefined,
+  };
+}
+
+const QUEST_SEED_META: Record<
+  number,
+  { tagIds: string[]; gameMode: Quest["gameMode"]; puzzleSteps: PuzzleStep[] }
+> = {
+  1: {
+    tagIds: ["tag-010"],
+    gameMode: "builtin",
+    puzzleSteps: [],
+  },
+  2: {
+    tagIds: ["tag-001", "tag-003", "tag-005"],
+    gameMode: "builtin",
+    puzzleSteps: [],
+  },
+  3: {
+    tagIds: ["tag-009", "tag-002"],
+    gameMode: "builtin",
+    puzzleSteps: [],
+  },
+  4: {
+    tagIds: ["tag-007", "tag-006", "tag-008"],
+    gameMode: "builtin",
+    puzzleSteps: [],
+  },
+  5: {
+    tagIds: ["tag-003"],
+    gameMode: "silence",
+    puzzleSteps: [],
+  },
+  6: {
+    tagIds: ["tag-002", "tag-003", "tag-007"],
+    gameMode: "custom",
+    puzzleSteps: [
+      {
+        id: "s1",
+        type: "code",
+        prompt: "Ange stationskoden från soffgruppen (står på brickan).",
+        answer: "a7",
+        tagId: "tag-002",
+      },
+      {
+        id: "s2",
+        type: "code",
+        prompt: "Ange koden från eldstadsnoden.",
+        answer: "k2",
+        tagId: "tag-003",
+      },
+      {
+        id: "s3",
+        type: "code",
+        prompt: "Ange slutkoden vid sällskapsspelen.",
+        answer: "x9",
+        tagId: "tag-007",
+      },
+    ],
+  },
+  7: {
+    tagIds: ["tag-005"],
+    gameMode: "custom",
+    puzzleSteps: [
+      {
+        id: "s1",
+        type: "choice",
+        prompt: "Vilken färgsekvens visades på minnesnoden?",
+        tagId: "tag-005",
+        choices: [
+          { id: "a", label: "Orange → Röd → Gul → Blå", correct: true },
+          { id: "b", label: "Blå → Gul → Röd → Orange", correct: false },
+          { id: "c", label: "Röd → Orange → Blå → Gul", correct: false },
+        ],
+      },
+    ],
+  },
+  8: {
+    tagIds: ["tag-001", "tag-004", "tag-006"],
+    gameMode: "custom",
+    puzzleSteps: [
+      {
+        id: "s1",
+        type: "choice",
+        prompt: "Två noder talar sanning. Vilken ljuger?",
+        choices: [
+          { id: "a", label: "NOD A – ”Koden är ett jämnt tal.”", correct: false },
+          { id: "b", label: "NOD B – ”Koden är större än 8.”", correct: true },
+          { id: "c", label: "NOD C – ”Koden är 6.”", correct: false },
+        ],
+      },
+    ],
+  },
+  9: {
+    tagIds: ["tag-010", "tag-006"],
+    gameMode: "custom",
+    puzzleSteps: [
+      {
+        id: "s1",
+        type: "text",
+        prompt: "Efter ledartaggen: vilket kodord fick du? (THE GLITCH)",
+        answer: "the glitch",
+        tagId: "tag-010",
+      },
+      {
+        id: "s2",
+        type: "code",
+        prompt: "Bekräfta slutnoden vid TV-hörnan med koden.",
+        answer: "agent",
+        tagId: "tag-006",
+      },
+    ],
+  },
+  10: {
+    tagIds: [],
+    gameMode: "custom",
+    puzzleSteps: [],
+  },
+};
+
 export async function ensureDefaults() {
   const community = db().collection("communityState").doc("default");
   const communitySnap = await community.get();
   if (!communitySnap.exists) {
-    await community.set({ scans: 0, goal: 500, updatedAt: nowIso() });
+    await community.set({ scans: 0, totalXp: 0, goal: 500, updatedAt: nowIso() });
   }
+
+  const settingsRef = db().collection("gameSettings").doc("default");
+  const settingsSnap = await settingsRef.get();
+  if (!settingsSnap.exists) {
+    await settingsRef.set({
+      simulateNfcEnabled: true,
+      unlocks: DEFAULT_COMMUNITY_UNLOCKS,
+      updatedAt: nowIso(),
+    } satisfies GameSettings);
+  }
+
+  const tagBatch = db().batch();
+  let tagWrites = 0;
+  for (const tag of DEFAULT_NFC_TAGS) {
+    const ref = db().collection("nfcTags").doc(tag.id);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      tagBatch.set(ref, { ...tag, createdAt: nowIso(), updatedAt: nowIso() });
+      tagWrites++;
+    }
+  }
+  if (tagWrites) await tagBatch.commit();
 
   const batch = db().batch();
   let writes = 0;
   for (let i = 0; i < DEFAULT_QUESTS.length; i++) {
     const [sourceKey, title, type, place, xp, description, steps] = DEFAULT_QUESTS[i];
     const id = i + 1;
+    const meta = QUEST_SEED_META[id];
     const ref = db().collection("quests").doc(String(id));
     const snap = await ref.get();
     if (!snap.exists) {
@@ -83,6 +260,12 @@ export async function ensureDefaults() {
         xp,
         description,
         steps: JSON.stringify(steps),
+        puzzleSteps: JSON.stringify(meta?.puzzleSteps || []),
+        tagIds: meta?.tagIds || [],
+        requireScan: (meta?.tagIds?.length || 0) > 0,
+        gameMode: meta?.gameMode || "builtin",
+        unlockMetric: null,
+        unlockAt: null,
         status: "published",
         createdBy: "system@goodgame",
         hintCost: 100,
@@ -94,6 +277,18 @@ export async function ensureDefaults() {
         updatedAt: nowIso(),
       });
       writes++;
+    } else {
+      const data = snap.data() || {};
+      const patch: Record<string, unknown> = {};
+      if (!Array.isArray(data.tagIds) && meta?.tagIds) patch.tagIds = meta.tagIds;
+      if (data.puzzleSteps == null && meta) patch.puzzleSteps = JSON.stringify(meta.puzzleSteps);
+      if (data.gameMode == null && meta) patch.gameMode = meta.gameMode;
+      if (data.requireScan == null) patch.requireScan = (meta?.tagIds?.length || 0) > 0;
+      if (Object.keys(patch).length) {
+        patch.updatedAt = nowIso();
+        batch.set(ref, patch, { merge: true });
+        writes++;
+      }
     }
   }
   if (writes) await batch.commit();
@@ -101,6 +296,158 @@ export async function ensureDefaults() {
   const counter = db().collection("counters").doc("quests");
   const counterSnap = await counter.get();
   if (!counterSnap.exists) await counter.set({ value: 100 });
+}
+
+export async function getGameSettings(): Promise<GameSettings> {
+  await ensureDefaults();
+  const snap = await db().collection("gameSettings").doc("default").get();
+  const data = snap.data() || {};
+  const unlocks = Array.isArray(data.unlocks) && data.unlocks.length
+    ? (data.unlocks as CommunityUnlockRule[]).map((u) => ({
+        questId: Number(u.questId),
+        title: String(u.title || ""),
+        metric: (u.metric === "xp" || u.metric === "none" ? u.metric : "scans") as UnlockMetric,
+        at: Number(u.at || 0),
+      }))
+    : DEFAULT_COMMUNITY_UNLOCKS;
+  return {
+    simulateNfcEnabled: data.simulateNfcEnabled !== false,
+    unlocks,
+    updatedAt: data.updatedAt as string | undefined,
+  };
+}
+
+export async function updateGameSettings(changes: Partial<GameSettings>) {
+  const current = await getGameSettings();
+  const next: GameSettings = {
+    simulateNfcEnabled:
+      changes.simulateNfcEnabled !== undefined
+        ? Boolean(changes.simulateNfcEnabled)
+        : current.simulateNfcEnabled,
+    unlocks: changes.unlocks ?? current.unlocks,
+    updatedAt: nowIso(),
+  };
+  await db().collection("gameSettings").doc("default").set(next, { merge: true });
+  return next;
+}
+
+export async function listTags(): Promise<NfcTag[]> {
+  await ensureDefaults();
+  const snaps = await db().collection("nfcTags").limit(200).get();
+  return snaps.docs
+    .map((d) => tagFromDoc(d.id, d.data()))
+    .sort((a, b) => a.id.localeCompare(b.id, "sv"));
+}
+
+export async function getTag(id: string) {
+  const snap = await db().collection("nfcTags").doc(id).get();
+  if (!snap.exists) return null;
+  return tagFromDoc(id, snap.data()!);
+}
+
+export async function getTagByStationKey(stationKey: string) {
+  const key = stationKey.trim().toLocaleLowerCase("sv-SE");
+  const snaps = await db().collection("nfcTags").where("stationKey", "==", stationKey).limit(1).get();
+  if (!snaps.empty) return tagFromDoc(snaps.docs[0].id, snaps.docs[0].data());
+  const all = await listTags();
+  return all.find((t) => t.stationKey.toLocaleLowerCase("sv-SE") === key) || null;
+}
+
+export async function createTag(input: {
+  name: string;
+  stationKey: string;
+  location?: string;
+  active?: boolean;
+}) {
+  const idNum = await nextCounter("nfcTags", 100);
+  const id = `tag-${String(idNum).padStart(3, "0")}`;
+  const stamp = nowIso();
+  const tag: NfcTag = {
+    id,
+    name: input.name.trim(),
+    stationKey: input.stationKey.trim().slice(0, 80) || id,
+    location: (input.location || "").trim(),
+    active: input.active !== false,
+    createdAt: stamp,
+    updatedAt: stamp,
+  };
+  await db().collection("nfcTags").doc(id).set(tag);
+  return tag;
+}
+
+export async function updateTag(id: string, changes: Partial<NfcTag>) {
+  const ref = db().collection("nfcTags").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const patch: Record<string, unknown> = { updatedAt: nowIso() };
+  if (changes.name !== undefined) patch.name = String(changes.name).trim();
+  if (changes.stationKey !== undefined) patch.stationKey = String(changes.stationKey).trim().slice(0, 80);
+  if (changes.location !== undefined) patch.location = String(changes.location).trim();
+  if (changes.active !== undefined) patch.active = Boolean(changes.active);
+  await ref.set(patch, { merge: true });
+  return getTag(id);
+}
+
+export async function deleteTag(id: string) {
+  await db().collection("nfcTags").doc(id).delete();
+}
+
+export async function communityTotalXp() {
+  const snaps = await db().collection("players").select("xp").limit(5000).get();
+  return snaps.docs.reduce((sum, d) => sum + Number(d.data().xp || 0), 0);
+}
+
+export function scheduleGate(quest: Quest, now = Date.now()) {
+  if (quest.startsAt) {
+    const start = new Date(quest.startsAt).getTime();
+    if (!Number.isNaN(start) && now < start) {
+      return {
+        ok: false as const,
+        error: `Uppdraget öppnar ${new Date(quest.startsAt).toLocaleString("sv-SE")}.`,
+        status: 403 as const,
+      };
+    }
+  }
+  if (quest.endsAt) {
+    const end = new Date(quest.endsAt).getTime();
+    if (!Number.isNaN(end) && now > end) {
+      return {
+        ok: false as const,
+        error: `Uppdraget stängde ${new Date(quest.endsAt).toLocaleString("sv-SE")}.`,
+        status: 403 as const,
+      };
+    }
+  }
+  return { ok: true as const };
+}
+
+export function unlockProgress(
+  rule: CommunityUnlockRule,
+  scans: number,
+  totalXp: number,
+) {
+  if (rule.metric === "none") return { unlocked: true, current: 0, at: 0 };
+  if (rule.metric === "xp") {
+    return { unlocked: totalXp >= rule.at, current: totalXp, at: rule.at };
+  }
+  return { unlocked: scans >= rule.at, current: scans, at: rule.at };
+}
+
+export async function isQuestUnlocked(
+  quest: Quest,
+  scans: number,
+  totalXp: number,
+  unlocks: CommunityUnlockRule[],
+) {
+  if (quest.unlockMetric === "none") return true;
+  if (quest.unlockMetric === "scans" || quest.unlockMetric === "xp") {
+    const at = Number(quest.unlockAt || 0);
+    if (quest.unlockMetric === "xp") return totalXp >= at;
+    return scans >= at;
+  }
+  const rule = unlocks.find((u) => u.questId === quest.id);
+  if (!rule || rule.metric === "none") return true;
+  return unlockProgress(rule, scans, totalXp).unlocked;
 }
 
 export async function getProfileByToken(token: string): Promise<PlayerProfile | null> {
@@ -245,12 +592,16 @@ async function renamePlayer(oldName: string, newName: string, team: string) {
   });
   batch.delete(db().collection("players").doc(oldKey));
 
-  for (const col of ["questCompletions", "questAcceptances", "hintPurchases", "nfcScans"] as const) {
+  for (const col of ["questCompletions", "questAcceptances", "hintPurchases", "nfcScans", "questTagScans"] as const) {
     const snaps = await db().collection(col).where("playerName", "==", oldName).get();
     for (const doc of snaps.docs) {
       const data = doc.data();
       const suffix =
-        col === "nfcScans" ? data.stationKey : data.questId;
+        col === "nfcScans"
+          ? data.stationKey
+          : col === "questTagScans"
+            ? `${data.questId}_${data.tagId}`
+            : data.questId;
       const nextId = compositeKey(newName, suffix);
       batch.set(db().collection(col).doc(nextId), {
         ...data,
@@ -381,6 +732,22 @@ export async function progressSnapshot(name: string) {
 }
 
 export async function acceptQuest(name: string, questId: number) {
+  const quest = await getQuest(questId);
+  if (!quest || quest.status !== "published") {
+    return { ok: false as const, error: "Uppdraget finns inte eller är inte publicerat.", status: 404 as const };
+  }
+  const schedule = scheduleGate(quest);
+  if (!schedule.ok) return schedule;
+
+  const settings = await getGameSettings();
+  const community = await db().collection("communityState").doc("default").get();
+  const scans = Number(community.data()?.scans || 0);
+  const totalXp = await communityTotalXp();
+  const unlocked = await isQuestUnlocked(quest, scans, totalXp, settings.unlocks);
+  if (!unlocked) {
+    return { ok: false as const, error: "Uppdraget är fortfarande låst för communityn.", status: 403 as const };
+  }
+
   const ref = db().collection("questAcceptances").doc(compositeKey(name, questId));
   let startedNow = false;
   await db().runTransaction(async (tx) => {
@@ -395,7 +762,82 @@ export async function acceptQuest(name: string, questId: number) {
     });
   });
   const acceptance = (await ref.get()).data();
-  return { startedNow, acceptance: acceptance ? { acceptedAt: acceptance.acceptedAt } : null };
+  return {
+    ok: true as const,
+    startedNow,
+    acceptance: acceptance ? { acceptedAt: acceptance.acceptedAt } : null,
+  };
+}
+
+export async function playerQuestTagScans(name: string, questId: number, tagIds?: string[]) {
+  const ids =
+    tagIds ||
+    (await getQuest(questId))?.tagIds ||
+    [];
+  const out: { tagId: string; stationKey: string; scannedAt: string }[] = [];
+  for (const tagId of ids) {
+    const snap = await db()
+      .collection("questTagScans")
+      .doc(compositeKey(name, `${questId}_${tagId}`))
+      .get();
+    if (!snap.exists) continue;
+    const data = snap.data()!;
+    out.push({
+      tagId: String(data.tagId || tagId),
+      stationKey: String(data.stationKey || ""),
+      scannedAt: String(data.scannedAt || ""),
+    });
+  }
+  return out;
+}
+
+export async function recordQuestTagScan(input: {
+  name: string;
+  questId: number;
+  tagId: string;
+  stationKey: string;
+}) {
+  const { name, questId, tagId, stationKey } = input;
+  const id = compositeKey(name, `${questId}_${tagId}`);
+  const ref = db().collection("questTagScans").doc(id);
+  let scannedNow = false;
+  await db().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (snap.exists) return;
+    scannedNow = true;
+    tx.set(ref, {
+      playerName: name,
+      playerNameLower: nameKey(name),
+      questId,
+      tagId,
+      stationKey,
+      scannedAt: nowIso(),
+    });
+  });
+  return { scannedNow, scans: await playerQuestTagScans(name, questId) };
+}
+
+export function validatePuzzleAnswers(steps: PuzzleStep[], answers: { stepId: string; answer: string }[]) {
+  if (!steps.length) return { ok: true as const };
+  const map = new Map(answers.map((a) => [a.stepId, a.answer]));
+  for (const step of steps) {
+    const given = map.get(step.id);
+    if (given == null || String(given).trim() === "") {
+      return { ok: false as const, error: `Steg saknas: ${step.prompt.slice(0, 40)}` };
+    }
+    if (step.type === "choice") {
+      const choice = (step.choices || []).find((c) => c.id === given || c.label === given);
+      if (!choice?.correct) {
+        return { ok: false as const, error: "Fel svar på flervalsfråga." };
+      }
+    } else {
+      const expected = normalizeAnswer(step.answer || "");
+      if (!expected || normalizeAnswer(given) !== expected) {
+        return { ok: false as const, error: "Fel svar." };
+      }
+    }
+  }
+  return { ok: true as const };
 }
 
 export async function completeQuest(input: {
@@ -403,15 +845,21 @@ export async function completeQuest(input: {
   team: string;
   questId: number;
   title: string;
+  answers?: { stepId: string; answer: string }[];
+  skipPuzzleCheck?: boolean;
 }) {
-  const { name, team, questId, title } = input;
+  const { name, team, questId, title, answers = [], skipPuzzleCheck = false } = input;
+  const quest = await getQuest(questId);
+  if (!quest || quest.status !== "published") {
+    return { ok: false as const, error: "Ogiltigt uppdrag", status: 400 as const };
+  }
+
+  const schedule = scheduleGate(quest);
+  if (!schedule.ok) return schedule;
+
   let base = BUILTIN_QUEST_REWARDS[questId]?.xp || 0;
   let target = BUILTIN_QUEST_REWARDS[questId]?.target || 600;
   if (!base) {
-    const quest = await getQuest(questId);
-    if (!quest || quest.status !== "published") {
-      return { ok: false as const, error: "Ogiltig XP-belöning", status: 400 as const };
-    }
     base = Math.max(0, Math.min(5000, Number(quest.xp) || 0));
     target = Math.max(300, Math.min(1800, Math.round(base * 1.5)));
   }
@@ -427,6 +875,31 @@ export async function completeQuest(input: {
       error: "Uppdraget måste antas innan det kan slutföras.",
       status: 409 as const,
     };
+  }
+
+  const trustBuiltin =
+    skipPuzzleCheck && (quest.gameMode === "builtin" || quest.gameMode === "silence");
+  const requiredTags =
+    !trustBuiltin && quest.requireScan !== false ? quest.tagIds || [] : [];
+  if (requiredTags.length) {
+    const scans = await playerQuestTagScans(name, questId, requiredTags);
+    const scanned = new Set(scans.map((s) => s.tagId));
+    const missing = requiredTags.filter((t) => !scanned.has(t));
+    if (missing.length) {
+      return {
+        ok: false as const,
+        error: `Skanna alla NFC-taggar först (${missing.length} kvar).`,
+        status: 403 as const,
+      };
+    }
+  }
+
+  const puzzles = parsePuzzleSteps(quest.puzzleSteps);
+  if (!skipPuzzleCheck && puzzles.length) {
+    const check = validatePuzzleAnswers(puzzles, answers);
+    if (!check.ok) {
+      return { ok: false as const, error: check.error, status: 400 as const };
+    }
   }
 
   const acceptedAt = String(acceptSnap.data()!.acceptedAt);
@@ -445,7 +918,7 @@ export async function completeQuest(input: {
       playerName: name,
       playerNameLower: nameKey(name),
       questId,
-      questTitle: title,
+      questTitle: title || quest.title,
       xpAwarded: xp,
       completedAt: nowIso(),
     });
@@ -457,10 +930,21 @@ export async function completeQuest(input: {
       { name, team, xp: currentXp + xp, updatedAt: nowIso() },
       { merge: true },
     );
+    const communityRef = db().collection("communityState").doc("default");
+    const communitySnap = await tx.get(communityRef);
+    tx.set(
+      communityRef,
+      {
+        totalXp: Number(communitySnap.data()?.totalXp || 0) + xp,
+        updatedAt: nowIso(),
+      },
+      { merge: true },
+    );
   });
 
   if (awarded) {
-    await addActivity(name, "quest", `klarade ${title} på ${formatTime(elapsed)}`, xp);
+    await addActivity(name, "quest", `klarade ${title || quest.title} på ${formatTime(elapsed)}`, xp);
+    await maybeEmitUnlocks();
   }
 
   return {
@@ -468,6 +952,42 @@ export async function completeQuest(input: {
     awarded,
     award: awarded ? { base, bonus, total: xp, elapsed, target } : null,
   };
+}
+
+async function maybeEmitUnlocks(opts?: { announce?: boolean }) {
+  const announce = opts?.announce !== false;
+  const settings = await getGameSettings();
+  const community = await db().collection("communityState").doc("default").get();
+  const scans = Number(community.data()?.scans || 0);
+  const totalXp = await communityTotalXp();
+  const rawEmitted = community.data()?.emittedUnlocks;
+  const bootstrapped = community.data()?.unlocksBootstrapped === true;
+  const emitted = new Set<string>((Array.isArray(rawEmitted) ? rawEmitted : []).map(String));
+  const newly: string[] = [];
+  for (const rule of settings.unlocks) {
+    const key = `${rule.questId}:${rule.metric}:${rule.at}`;
+    if (emitted.has(key)) continue;
+    if (unlockProgress(rule, scans, totalXp).unlocked) {
+      newly.push(key);
+      // Skip historical unlocks on first bootstrap so live screen isn't flooded
+      if (announce && bootstrapped) {
+        await addActivity("COMMUNITY", "unlock", `låste upp ${rule.title}`, 0);
+      }
+    }
+  }
+  if (newly.length || !bootstrapped) {
+    await db()
+      .collection("communityState")
+      .doc("default")
+      .set(
+        {
+          emittedUnlocks: [...emitted, ...newly],
+          unlocksBootstrapped: true,
+          updatedAt: nowIso(),
+        },
+        { merge: true },
+      );
+  }
 }
 
 function timeBonus(base: number, elapsed: number, target: number) {
@@ -485,6 +1005,13 @@ function formatTime(seconds: number) {
 
 export async function communitySnapshot() {
   await ensureDefaults();
+  // Ensure unlock bookkeeping exists without announcing historical unlocks
+  const communityRef = db().collection("communityState").doc("default");
+  const boot = await communityRef.get();
+  if (!boot.data()?.unlocksBootstrapped) {
+    await maybeEmitUnlocks({ announce: false });
+  }
+  const settings = await getGameSettings();
   const boardSnap = await db().collection("players").orderBy("xp", "desc").limit(10).get();
   const board = boardSnap.docs
     .map((d) => ({
@@ -501,6 +1028,7 @@ export async function communitySnapshot() {
 
   const baseSnap = await db().collection("communityState").doc("default").get();
   const scans = Number(baseSnap.data()?.scans || 0);
+  const totalXp = await communityTotalXp();
   const goal = Number(baseSnap.data()?.goal || 500);
   const updatedAt = (baseSnap.data()?.updatedAt as string) || nowIso();
 
@@ -521,19 +1049,32 @@ export async function communitySnapshot() {
   const nfcSnap = await db().collection("nfcScans").select("playerName", "stationKey").limit(5000).get();
   const contributors = new Set(nfcSnap.docs.map((d) => d.data().playerName)).size;
   const nodes = new Set(nfcSnap.docs.map((d) => d.data().stationKey)).size;
-  const next = COMMUNITY_UNLOCKS.find((u) => scans < u.at) || null;
+
+  const unlocks = settings.unlocks.map((u) => {
+    const progress = unlockProgress(u, scans, totalXp);
+    return {
+      ...u,
+      unlocked: progress.unlocked,
+      current: progress.current,
+      unit: u.metric === "xp" ? "XP" : u.metric === "scans" ? "skanningar" : "",
+    };
+  });
+  const next = unlocks.find((u) => !u.unlocked) || null;
+  const level = unlocks.filter((u) => u.unlocked).length + 1;
 
   return {
     board,
+    settings: { simulateNfcEnabled: settings.simulateNfcEnabled },
     community: {
       scans,
+      totalXp,
       goal,
       updatedAt,
       contributors,
       nodes,
-      level: COMMUNITY_UNLOCKS.filter((u) => scans >= u.at).length + 1,
+      level,
       next,
-      unlocks: COMMUNITY_UNLOCKS.map((u) => ({ ...u, unlocked: scans >= u.at })),
+      unlocks,
     },
     activities,
   };
@@ -590,13 +1131,34 @@ export async function recordNfcScan(input: {
 
   if (awarded) {
     await addActivity(name, "scan", "hittade en NFC-signal", xpGain);
-    const crossed = COMMUNITY_UNLOCKS.find((u) => before < u.at && after >= u.at);
-    if (crossed) {
-      await addActivity("COMMUNITY", "unlock", `låste upp ${crossed.title}`, 0);
+    await maybeEmitUnlocks();
+  }
+
+  // Also credit quest-tag progress when station matches a tag on an accepted quest
+  const tag = await getTagByStationKey(stationKey);
+  let questTagProgress: { questId: number; tagId: string } | null = null;
+  if (tag) {
+    const accepts = await db()
+      .collection("questAcceptances")
+      .where("playerName", "==", name)
+      .limit(50)
+      .get();
+    for (const doc of accepts.docs) {
+      const questId = Number(doc.data().questId);
+      const quest = await getQuest(questId);
+      if (!quest?.tagIds?.includes(tag.id)) continue;
+      await recordQuestTagScan({
+        name,
+        questId,
+        tagId: tag.id,
+        stationKey: tag.stationKey,
+      });
+      questTagProgress = { questId, tagId: tag.id };
+      break;
     }
   }
 
-  return { scanAwarded: awarded };
+  return { scanAwarded: awarded, questTagProgress, before, after };
 }
 
 export async function hintStatus(name: string, questId: number) {
@@ -670,6 +1232,14 @@ export async function listPublishedCustomQuests() {
     .sort((a, b) => String(a.startsAt || "").localeCompare(String(b.startsAt || "")));
 }
 
+export async function listPublishedQuests() {
+  await ensureDefaults();
+  const snaps = await db().collection("quests").where("status", "==", "published").limit(200).get();
+  return snaps.docs
+    .map((d) => questFromDoc(Number(d.id), d.data()))
+    .sort((a, b) => a.id - b.id);
+}
+
 export async function listAllQuests() {
   await ensureDefaults();
   const snaps = await db().collection("quests").limit(500).get();
@@ -695,6 +1265,7 @@ export async function createQuest(value: Omit<Quest, "id" | "createdAt" | "updat
     description: value.description,
     place: value.place,
     steps: value.steps || "[]",
+    puzzleSteps: value.puzzleSteps || "[]",
     xp: value.xp,
     hintCost: value.hintCost,
     hintText: value.hintText,
@@ -702,6 +1273,11 @@ export async function createQuest(value: Omit<Quest, "id" | "createdAt" | "updat
     startsAt: value.startsAt,
     endsAt: value.endsAt,
     status: value.status,
+    tagIds: value.tagIds || [],
+    requireScan: value.requireScan !== false,
+    unlockMetric: value.unlockMetric ?? null,
+    unlockAt: value.unlockAt ?? null,
+    gameMode: value.gameMode || "custom",
     createdBy: value.createdBy,
     createdAt: stamp,
     updatedAt: stamp,

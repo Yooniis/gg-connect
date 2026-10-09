@@ -1,4 +1,9 @@
-import { communitySnapshot, recordNfcScan, sessionFromRequest } from "@/lib/db";
+import {
+  communitySnapshot,
+  getGameSettings,
+  recordNfcScan,
+  sessionFromRequest,
+} from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +31,15 @@ export async function POST(request: Request) {
     String((input as { stationKey?: string }).stationKey || "simulator")
       .trim()
       .slice(0, 80) || "simulator";
+
+  const settings = await getGameSettings();
+  const isSim = station === "simulator" || station.startsWith("sim-");
+  if (isSim && !settings.simulateNfcEnabled) {
+    return Response.json(
+      { error: "NFC-simulering är avstängd av admin." },
+      { status: 403 },
+    );
+  }
 
   const result = await recordNfcScan({
     name: identity.name,

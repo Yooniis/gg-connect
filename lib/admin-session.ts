@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 
-const COOKIE = "gg_admin";
+// Firebase Hosting only forwards the `__session` cookie to Cloud Run.
+const COOKIE = "__session";
 const encoder = new TextEncoder();
 
 function adminPin() {
@@ -28,10 +29,14 @@ function cookieFlags(maxAge: number) {
   return `Path=/; Max-Age=${maxAge}; SameSite=Lax; HttpOnly${secure}`;
 }
 
-export async function createAdminCookieHeader() {
+export async function createAdminCookieValue() {
   const pin = adminPin();
   if (!pin) throw new Error("ADMIN_PIN saknas");
-  const token = await sessionToken(pin);
+  return sessionToken(pin);
+}
+
+export async function createAdminCookieHeader() {
+  const token = await createAdminCookieValue();
   return `${COOKIE}=${token}; ${cookieFlags(2592000)}`;
 }
 
@@ -53,7 +58,7 @@ export async function isAdminRequest(request?: Request) {
   let raw = "";
   if (request) {
     raw = decodeURIComponent(
-      (request.headers.get("cookie") || "").match(/(?:^|; )gg_admin=([^;]+)/)?.[1] || "",
+      (request.headers.get("cookie") || "").match(/(?:^|; )__session=([^;]+)/)?.[1] || "",
     );
   } else {
     const jar = await cookies();

@@ -24,6 +24,26 @@
             "region": "europe-west4"
           }
         }
+      ],
+      "headers": [
+        {
+          "source": "/admin{,/**}",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "private, no-store, no-cache, must-revalidate"
+            }
+          ]
+        },
+        {
+          "source": "/api/**",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "private, no-store, no-cache, must-revalidate"
+            }
+          ]
+        }
       ]
     }
   ],

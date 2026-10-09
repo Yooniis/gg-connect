@@ -17,11 +17,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Good Game: Parkaden Quest",
     description: "Hitta signaler. Samla laget. Lös NFC-uppdragen.",
-    images: [{ url: "/good-game-logo.jpg" }],
+    images: [{ url: "/gg-logo.png" }],
   },
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "/gg-logo.png",
+    shortcut: "/gg-logo.png",
   },
 };
 
