@@ -12,7 +12,7 @@ export async function POST() {
   return Response.json(
     {
       error:
-        "Lag är avstängda. Alla spelar i samma community – jaga toppen på XP-listan i stället.",
+        "Lag är avstängda. Alla spelar i samma community – jaga Chip-toppen i stället.",
     },
     { status: 410 },
   );

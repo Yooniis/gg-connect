@@ -328,7 +328,7 @@ export default function AdminQuestEditor() {
                   </span>
                   <h3>{q.title}</h3>
                   <p>
-                    {q.place || "Ingen plats"} · {q.xp} XP · {(q.tagIds || []).length} taggar ·{" "}
+                    {q.place || "Ingen plats"} · {q.xp} Chip · {(q.tagIds || []).length} taggar ·{" "}
                     {q.gameMode || "custom"}
                   </p>
                   {q.startsAt && (
@@ -409,7 +409,7 @@ export default function AdminQuestEditor() {
         {tab === "unlocks" && (
           <div className="admin-unlocks">
             <p className="admin-help">
-              Community-upplåsning: välj skanningar eller total XP. Boss defaultar till XP – ändra fritt.
+              Community-upplåsning: välj skanningar eller total Chip. Boss defaultar till Chip – ändra fritt.
             </p>
             {unlocks.map((u, i) => (
               <div className="unlock-edit-row" key={`${u.questId}-${i}`}>
@@ -445,7 +445,7 @@ export default function AdminQuestEditor() {
                   }
                 >
                   <option value="scans">Skanningar</option>
-                  <option value="xp">Community XP</option>
+                  <option value="xp">Community Chip</option>
                   <option value="none">Alltid öppen</option>
                 </select>
                 <input
@@ -541,7 +541,7 @@ export default function AdminQuestEditor() {
           </label>
           <div className="field-row">
             <label>
-              Belöning (XP)
+              Belöning (Chip)
               <input
                 type="number"
                 min="0"
@@ -651,7 +651,7 @@ export default function AdminQuestEditor() {
                 <option value="">Använd community-listan</option>
                 <option value="none">Alltid öppen</option>
                 <option value="scans">Skanningar</option>
-                <option value="xp">Community XP</option>
+                <option value="xp">Community Chip</option>
               </select>
             </label>
             <label>

@@ -147,8 +147,8 @@ export default function PlayerOnboarding() {
           <>
             <h2>Välkommen till spelet</h2>
             <p>
-              Alla spelar i samma community. Skapa en profil så följer din XP och dina uppdrag med
-              mellan enheter – och bara en kan toppa XP-listan.
+              Alla spelar i samma community. Samla Chip, uppgradera kärnan tillsammans – och bara
+              en kan toppa Chip-listan.
             </p>
             <div className="account-options">
               <button

@@ -102,7 +102,10 @@ export type Activity = {
   createdAt: string;
 };
 
-/** Default unlock ladder: 6–9 by scans, boss (4) by community XP */
+/** Display name for the player currency (stored as `xp` in Firestore). */
+export const CURRENCY = "Chip";
+
+/** Default unlock ladder: 6–9 by scans, boss (4) by community Chip */
 export const DEFAULT_COMMUNITY_UNLOCKS: CommunityUnlockRule[] = [
   { at: 25, title: "Signalstafetten", questId: 6, metric: "scans" },
   { at: 75, title: "Minnesglitch", questId: 7, metric: "scans" },

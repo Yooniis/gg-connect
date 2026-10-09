@@ -108,7 +108,7 @@ export default function ProjectorLive() {
     Math.round(((current - previous) / Math.max(1, nextAt - previous)) * 100),
   );
   const level = community?.level || 1;
-  const unit = metric === "xp" ? "XP" : "skanningar";
+  const unit = metric === "xp" ? "Chip" : "skanningar";
 
   const messages = useMemo(() => {
     const leader = board[0];
@@ -117,16 +117,16 @@ export default function ProjectorLive() {
     const recent = data?.activities?.[0];
     return [
       recent
-        ? `${recent.playerName} ${recent.message}${recent.xp ? ` · +${recent.xp} XP` : ""}`
-        : "Jakten på XP-toppen har börjat!",
+        ? `${recent.playerName} ${recent.message}${recent.xp ? ` · +${recent.xp} Chip` : ""}`
+        : "Jakten på Chip-toppen har börjat!",
       leader
-        ? `${leader.name} leder med ${gap.toLocaleString("sv-SE")} XP`
+        ? `${leader.name} leder med ${gap.toLocaleString("sv-SE")} Chip`
         : "Vem tar ledningen?",
       next
         ? `${Math.max(0, next.at - current).toLocaleString("sv-SE")} ${unit} kvar tills ${next.title} låses upp`
         : "Alla community-utmaningar är upplåsta!",
       board[2] ? `${board[2].name} jagar pallplatsen!` : "Vem tar tredjeplatsen?",
-      `${(totalXp || 0).toLocaleString("sv-SE")} XP i communityn · ${community?.contributors || 0} spelare · ${community?.nodes || 0} noder`,
+      `${(totalXp || 0).toLocaleString("sv-SE")} Chip i communityn · ${community?.contributors || 0} spelare · ${community?.nodes || 0} noder`,
     ];
   }, [board, current, next, data, community, unit, totalXp]);
 
@@ -157,7 +157,7 @@ export default function ProjectorLive() {
                 ? "UPPDRAG SLUTFÖRT"
                 : "NY NFC-SKANNING"}
           </small>
-          <h1>{burst.kind === "unlock" ? "UPPLÅST!" : `+${burst.xp} XP`}</h1>
+          <h1>{burst.kind === "unlock" ? "UPPLÅST!" : `+${burst.xp} Chip`}</h1>
           <h2>{burst.playerName}</h2>
           <p>{burst.message}</p>
         </div>
@@ -179,7 +179,7 @@ export default function ProjectorLive() {
       </header>
       <section className="projector-main">
         <div className="projector-score">
-          <div className="screen-label">LIVE SCOREBOARD · XP</div>
+          <div className="screen-label">LIVE SCOREBOARD · CHIP</div>
           <ol>
             {board.slice(0, 5).map((p, i) => (
               <li key={p.name} className={`rank-${i + 1}`}>
@@ -189,7 +189,7 @@ export default function ProjectorLive() {
                   <small>Community</small>
                 </span>
                 <em>
-                  {p.xp.toLocaleString("sv-SE")} <small>XP</small>
+                  {p.xp.toLocaleString("sv-SE")} <small>Chip</small>
                 </em>
               </li>
             ))}
@@ -205,7 +205,7 @@ export default function ProjectorLive() {
           </div>
           <div className="scan-total">
             <b>{scans}</b>
-            <span>SKANNINGAR · {(totalXp || 0).toLocaleString("sv-SE")} XP</span>
+            <span>SKANNINGAR · {(totalXp || 0).toLocaleString("sv-SE")} CHIP</span>
           </div>
           <div className="projector-bar">
             <i style={{ width: `${pct}%` }} />
@@ -222,7 +222,7 @@ export default function ProjectorLive() {
             {(community?.unlocks || []).slice(-3).map((u) => (
               <span key={`${u.questId}-${u.at}`} className={u.unlocked ? "done" : ""}>
                 {u.unlocked ? "✓ " : ""}
-                {u.at.toLocaleString("sv-SE")} {u.metric === "xp" ? "XP" : ""} {u.title.toUpperCase()}
+                {u.at.toLocaleString("sv-SE")} {u.metric === "xp" ? "CHIP" : ""} {u.title.toUpperCase()}
               </span>
             ))}
           </div>

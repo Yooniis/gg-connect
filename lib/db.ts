@@ -864,7 +864,7 @@ export async function completeQuest(input: {
     target = Math.max(300, Math.min(1800, Math.round(base * 1.5)));
   }
   if (!base) {
-    return { ok: false as const, error: "Ogiltig XP-belöning", status: 400 as const };
+    return { ok: false as const, error: "Ogiltig Chip-belöning", status: 400 as const };
   }
 
   const acceptRef = db().collection("questAcceptances").doc(compositeKey(name, questId));
@@ -1056,7 +1056,7 @@ export async function communitySnapshot() {
       ...u,
       unlocked: progress.unlocked,
       current: progress.current,
-      unit: u.metric === "xp" ? "XP" : u.metric === "scans" ? "skanningar" : "",
+      unit: u.metric === "xp" ? "Chip" : u.metric === "scans" ? "skanningar" : "",
     };
   });
   const next = unlocks.find((u) => !u.unlocked) || null;
@@ -1195,7 +1195,7 @@ export async function purchaseHint(name: string, questId: number, cost: number) 
       return;
     }
     if (xp < cost) {
-      error = "Du har inte tillräckligt med XP.";
+      error = "Du har inte tillräckligt med Chip.";
       return;
     }
     newXp = xp - cost;

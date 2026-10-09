@@ -1,4 +1,63 @@
 "use client";
-import { useCallback,useEffect,useState } from "react";
+
+import { useCallback, useEffect, useState } from "react";
 import { getPlayer } from "./player-session";
-export default function PlayerXP(){const[xp,setXp]=useState(0),[done,setDone]=useState(0),[name,setName]=useState("NY SPELARE");const load=useCallback(()=>{const p=getPlayer();if(!p){setXp(0);setDone(0);setName("NY SPELARE");return Promise.resolve()}setName(p.name);return fetch(`/api/progress?player=${encodeURIComponent(p.name)}`,{cache:"no-store"}).then(r=>r.json()).then(d=>{if(d.player)setXp(d.player.xp);setDone(d.completions?.length||0)}).catch(()=>{})},[]);useEffect(()=>{load();window.addEventListener("progress-updated",load);window.addEventListener("player-ready",load);return()=>{window.removeEventListener("progress-updated",load);window.removeEventListener("player-ready",load)}},[load]);const level=Math.floor(xp/500)+1,next=Math.ceil((xp+1)/500)*500,progress=(xp%500)/5;return <button className="player-stats" onClick={()=>window.dispatchEvent(new Event("open-player-profile"))}><div className="level-ring"><span>LVL</span><b>{String(level).padStart(2,"0")}</b></div><div><span>{name}</span><strong>{xp.toLocaleString("sv-SE")} XP</strong><small>{next-xp} XP till nivå {level+1} · {done} klara uppdrag</small><div className="progress"><i style={{width:`${progress}%`}}/></div></div></button>}
+import { CURRENCY } from "@/lib/types";
+
+export default function PlayerXP() {
+  const [xp, setXp] = useState(0);
+  const [done, setDone] = useState(0);
+  const [name, setName] = useState("NY SPELARE");
+  const load = useCallback(() => {
+    const p = getPlayer();
+    if (!p) {
+      setXp(0);
+      setDone(0);
+      setName("NY SPELARE");
+      return Promise.resolve();
+    }
+    setName(p.name);
+    return fetch(`/api/progress?player=${encodeURIComponent(p.name)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.player) setXp(d.player.xp);
+        setDone(d.completions?.length || 0);
+      })
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    load();
+    window.addEventListener("progress-updated", load);
+    window.addEventListener("player-ready", load);
+    return () => {
+      window.removeEventListener("progress-updated", load);
+      window.removeEventListener("player-ready", load);
+    };
+  }, [load]);
+  const level = Math.floor(xp / 500) + 1;
+  const next = Math.ceil((xp + 1) / 500) * 500;
+  const progress = (xp % 500) / 5;
+  return (
+    <button
+      className="player-stats"
+      onClick={() => window.dispatchEvent(new Event("open-player-profile"))}
+    >
+      <div className="level-ring">
+        <span>LVL</span>
+        <b>{String(level).padStart(2, "0")}</b>
+      </div>
+      <div>
+        <span>{name}</span>
+        <strong>
+          {xp.toLocaleString("sv-SE")} {CURRENCY}
+        </strong>
+        <small>
+          {next - xp} {CURRENCY} till nivå {level + 1} · {done} klara uppdrag
+        </small>
+        <div className="progress">
+          <i style={{ width: `${progress}%` }} />
+        </div>
+      </div>
+    </button>
+  );
+}

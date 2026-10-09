@@ -61,7 +61,7 @@ export default function LiveCommunity() {
     Math.round(((current - stageStart) / Math.max(1, nextAt - stageStart)) * 100),
   );
   const me = getPlayer()?.name;
-  const unit = metric === "xp" ? "XP" : "skanningar";
+  const unit = metric === "xp" ? "Chip" : "skanningar";
 
   return (
     <section className="live-community" id="community-core">
@@ -78,8 +78,9 @@ export default function LiveCommunity() {
           </strong>
         </div>
         <p>
-          Varje skanning och varje XP laddar samma kärna. Boss och andra mål kan låsas upp via
-          skanningar eller communityns totala XP – beroende på admin.
+          Varje skanning och varje Chip uppgraderar Parkaden-kärnan. Tillsammans höjer ni
+          kärnnivån — en tar Chip-toppen. Boss och andra mål låses via skanningar eller
+          communityns totala Chip.
         </p>
         <div className="community-stats">
           <span>
@@ -89,7 +90,7 @@ export default function LiveCommunity() {
             <b>{c.nodes}</b> noder hittade
           </span>
           <span>
-            <b>{(c.totalXp || 0).toLocaleString("sv-SE")}</b> XP totalt
+            <b>{(c.totalXp || 0).toLocaleString("sv-SE")}</b> Chip totalt
           </span>
           <span>
             <b>{c.unlocks.filter((u) => u.unlocked).length}</b> quests upplåsta
@@ -115,7 +116,7 @@ export default function LiveCommunity() {
               <i>{u.unlocked ? "✓" : i + 1}</i>
               <span>
                 <small>
-                  {u.at.toLocaleString("sv-SE")} {u.metric === "xp" ? "XP" : "SKANNINGAR"}
+                  {u.at.toLocaleString("sv-SE")} {u.metric === "xp" ? "CHIP" : "SKANNINGAR"}
                 </small>
                 <b>{u.title}</b>
               </span>
@@ -128,7 +129,7 @@ export default function LiveCommunity() {
         <div className="score-head">
           <div>
             <small>LIVE SCOREBOARD</small>
-            <h2>XP-toppen</h2>
+            <h2>Chip-toppen</h2>
           </div>
           <button onClick={() => setOpen((v) => !v)}>{open ? "VISA TOPP 5" : "VISA ALLA"}</button>
         </div>
@@ -140,7 +141,7 @@ export default function LiveCommunity() {
                 <strong>{p.name}</strong>
                 <small>Community</small>
               </span>
-              <em>{p.xp.toLocaleString("sv-SE")} XP</em>
+              <em>{p.xp.toLocaleString("sv-SE")} Chip</em>
             </li>
           ))}
         </ol>

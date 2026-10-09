@@ -177,7 +177,7 @@ export default function Home() {
     if (!rule || rule.metric === "none") return null;
     const current = rule.metric === "xp" ? communityXp : communityScans;
     const left = Math.max(0, rule.at - current);
-    const unit = rule.metric === "xp" ? "XP" : "skanningar";
+    const unit = rule.metric === "xp" ? "Chip" : "skanningar";
     return { left, unit, at: rule.at, title: rule.title };
   };
 
@@ -232,7 +232,7 @@ export default function Home() {
               <br />
               <em>spelplanen.</em>
             </h1>
-            <p className="lead">Hitta signaler. Hjälp communityn. Jaga XP-toppen.</p>
+            <p className="lead">Hitta signaler. Uppgradera kärnan. Jaga Chip-toppen.</p>
           </div>
           <PlayerXP />
         </section>
@@ -305,7 +305,7 @@ export default function Home() {
                       <b>
                         {locked && lock
                           ? `${lock.left.toLocaleString("sv-SE")} ${lock.unit} kvar`
-                          : `+${q.xp} XP`}
+                          : `+${q.xp} Chip`}
                       </b>
                       <span>
                         {scheduleBlocked
@@ -427,7 +427,7 @@ export default function Home() {
             </button>
             <span className="quest-icon large">{selected.icon}</span>
             <p className="eyebrow">
-              {selected.type} QUEST · {selected.xp} GRUND-XP + TIDSBONUS
+              {selected.type} QUEST · {selected.xp} GRUND-CHIP + TIDSBONUS
             </p>
             <h2>{selected.title}</h2>
             <p>{selected.description}</p>
@@ -447,8 +447,8 @@ export default function Home() {
             <div className="time-xp-note">
               <b>⏱ TIDEN STARTAR NÄR DU ANTAR</b>
               <span>
-                Snabbare lösning ger upp till 50 % extra XP. Du behåller alltid uppdragets
-                grundpoäng.
+                Snabbare lösning ger upp till 50 % extra Chip. Du behåller alltid uppdragets
+                grundbelöning.
               </span>
             </div>
             <button className="primary full" onClick={() => acceptQuest(selected)}>
@@ -511,7 +511,7 @@ export default function Home() {
                   setScanOpen(false);
                 }}
               >
-                SIMULERA SKANNING · +20 XP
+                SIMULERA SKANNING · +20 Chip
               </button>
             ) : (
               <p className="error-note">NFC-simulering är avstängd av admin.</p>
