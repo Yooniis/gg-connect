@@ -28,7 +28,7 @@ export async function awardQuest(
   if (!r.ok) {
     const message = data.error || "Kunde inte spara Chip";
     window.alert(message);
-    return { awarded: false, error: message };
+    return { awarded: false, error: message, stepId: data.stepId as string | undefined };
   }
   if (data.award) window.dispatchEvent(new CustomEvent("xp-awarded", { detail: data.award }));
   window.dispatchEvent(new Event("progress-updated"));

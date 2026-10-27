@@ -6,6 +6,7 @@ import CoreQuestGames from "./CoreQuestGames";
 import QuestRunner from "./QuestRunner";
 import MicGate from "./MicGate";
 import SilenceQuest from "./SilenceQuest";
+import QuestLobby from "./QuestLobby";
 import LiveQuestFeed from "./LiveQuestFeed";
 import LiveCommunity from "./LiveCommunity";
 import PlayerXP from "./PlayerXP";
@@ -14,6 +15,7 @@ import XpAwardToast from "./XpAwardToast";
 import CompletionLock from "./CompletionLock";
 import PlayerOnboarding from "./PlayerOnboarding";
 import { getPlayer } from "./player-session";
+import { partySizeForQuest } from "@/lib/types";
 
 type Tag = { id: string; name: string; stationKey: string; location: string };
 type PuzzleStep = {
@@ -65,8 +67,8 @@ const ideas = [
   ["Tyst kommunikation", "Två spelare får varsin halva av en gåta och får inte prata."],
   ["Minnesglitch", "Se en sekvens i fem sekunder – återskapa den vid nästa station."],
   ["Falsk nod", "Tre brickor ger ledtrådar, men en av dem ljuger."],
-  ["Hemlig agent", "En spelare får ett dolt sidouppdrag mitt under lagets quest."],
-  ["Community unlock", "Alla deltagares skanningar fyller en gemensam energimätare."],
+  ["Hemlig agent", "En spelare får ett dolt sidouppdrag mitt under lagets uppdrag."],
+  ["Community-upplåsning", "Alla deltagares skanningar fyller en gemensam energimätare."],
 ];
 
 function decorate(q: Quest, index: number): Quest {
@@ -87,6 +89,7 @@ export default function Home() {
   const [joined, setJoined] = useState<number[]>([]);
   const [scanOpen, setScanOpen] = useState(false);
   const [silenceOpen, setSilenceOpen] = useState(false);
+  const [partyReadyIds, setPartyReadyIds] = useState<number[]>([]);
   const [simulateNfc, setSimulateNfc] = useState(true);
   const [communityScans, setCommunityScans] = useState(0);
   const [communityXp, setCommunityXp] = useState(0);
@@ -181,6 +184,16 @@ export default function Home() {
     return { left, unit, at: rule.at, title: rule.title };
   };
 
+  const claimCommunityQuest = async (q: Quest) => {
+    const accepted = await persistAcceptance(q);
+    if (!accepted?.accepted) {
+      if (accepted?.error) window.alert(accepted.error);
+      return;
+    }
+    setJoined((c) => (c.includes(q.id) ? c : [...c, q.id]));
+    await awardQuest(q);
+  };
+
   const acceptQuest = async (q: Quest) => {
     const result = await persistAcceptance(q);
     if (!result?.accepted) {
@@ -212,7 +225,7 @@ export default function Home() {
         <div className="brand">
           <span className="brandmark">GG</span>
           <span>
-            GOOD GAME <b>QUEST</b>
+            GOOD GAME <b>CONNECT</b>
           </span>
         </div>
         <div className="live">
@@ -228,9 +241,9 @@ export default function Home() {
           <div>
             <p className="eyebrow">HÖSTLOVET · HÄRNÖSAND</p>
             <h1>
-              Parkaden är
+              Good Game
               <br />
-              <em>spelplanen.</em>
+              <em>Connect</em>
             </h1>
             <p className="lead">Hitta signaler. Uppgradera kärnan. Jaga Chip-toppen.</p>
           </div>
@@ -275,10 +288,15 @@ export default function Home() {
                     className={`quest ${q.accent} ${locked || scheduleBlocked ? "community-locked" : ""}`}
                     key={q.id}
                     onClick={() => {
-                      if (q.id === 10) {
+                      if (q.id === 10 || q.title === "Community-upplåsning") {
                         document.getElementById("community-core")?.scrollIntoView({
                           behavior: "smooth",
                         });
+                        if (!locked && !scheduleBlocked) void claimCommunityQuest(q);
+                        return;
+                      }
+                      if ((q.gameMode === "silence" || q.id === 5) && joined.includes(q.id)) {
+                        setSilenceOpen(true);
                         return;
                       }
                       if (!locked && !scheduleBlocked) setSelected(q);
@@ -311,9 +329,9 @@ export default function Home() {
                         {scheduleBlocked
                           ? "UTANFÖR SCHEMA"
                           : locked && lock
-                            ? `LÅSES VID ${lock.at.toLocaleString("sv-SE")}`
+                            ? `LÅSES UPP VID ${lock.at.toLocaleString("sv-SE")}`
                             : q.id === 10
-                              ? "VISA COMMUNITY CORE ↑"
+                              ? "VISA COMMUNITY-KÄRNAN ↑"
                               : joined.includes(q.id)
                                 ? "ANTAGET ✓"
                                 : "VISA UPPDRAG →"}
@@ -390,31 +408,77 @@ export default function Home() {
       {activeGame === "core" && selected && (
         <CoreQuestGames
           questId={selected.id}
-          onClose={() => setSelected(null)}
+          simulateNfc={simulateNfc}
+          onClose={() => {
+            setSelected(null);
+            setPartyReadyIds((ids) => ids.filter((id) => id !== selected.id));
+          }}
           onComplete={() => {
             setJoined((c) => (c.includes(selected.id) ? c : [...c, selected.id]));
             awardQuest(selected, { skipPuzzleCheck: true });
           }}
         />
       )}
-      {activeGame === "legacy" && selected && (
-        <QuestGames
-          questId={selected.id}
-          onClose={() => setSelected(null)}
-          onComplete={() => {
-            setJoined((c) => (c.includes(selected.id) ? c : [...c, selected.id]));
-            awardQuest(selected, { skipPuzzleCheck: true });
-          }}
-        />
-      )}
-      {activeGame === "custom" && selected && (
-        <QuestRunner
-          quest={selected}
-          simulateNfcEnabled={simulateNfc}
-          onClose={() => setSelected(null)}
-          onComplete={() => setJoined((c) => (c.includes(selected.id) ? c : [...c, selected.id]))}
-        />
-      )}
+      {activeGame === "legacy" &&
+        selected &&
+        partySizeForQuest(selected.id, selected.type) > 1 &&
+        !partyReadyIds.includes(selected.id) && (
+          <QuestLobby
+            questId={selected.id}
+            questTitle={selected.title}
+            questType={selected.type}
+            requiredPlayers={partySizeForQuest(selected.id, selected.type)}
+            onClose={() => setSelected(null)}
+            onStarted={() =>
+              setPartyReadyIds((ids) => (ids.includes(selected.id) ? ids : [...ids, selected.id]))
+            }
+          />
+        )}
+      {activeGame === "legacy" &&
+        selected &&
+        (partySizeForQuest(selected.id, selected.type) <= 1 ||
+          partyReadyIds.includes(selected.id)) && (
+          <QuestGames
+            questId={selected.id}
+            onClose={() => {
+              setSelected(null);
+              setPartyReadyIds((ids) => ids.filter((id) => id !== selected.id));
+            }}
+            onComplete={() => {
+              setJoined((c) => (c.includes(selected.id) ? c : [...c, selected.id]));
+              awardQuest(selected, { skipPuzzleCheck: true });
+            }}
+          />
+        )}
+      {activeGame === "custom" &&
+        selected &&
+        partySizeForQuest(selected.id, selected.type) > 1 &&
+        !partyReadyIds.includes(selected.id) && (
+          <QuestLobby
+            questId={selected.id}
+            questTitle={selected.title}
+            questType={selected.type}
+            requiredPlayers={partySizeForQuest(selected.id, selected.type)}
+            onClose={() => setSelected(null)}
+            onStarted={() =>
+              setPartyReadyIds((ids) => (ids.includes(selected.id) ? ids : [...ids, selected.id]))
+            }
+          />
+        )}
+      {activeGame === "custom" &&
+        selected &&
+        (partySizeForQuest(selected.id, selected.type) <= 1 ||
+          partyReadyIds.includes(selected.id)) && (
+          <QuestRunner
+            quest={selected}
+            simulateNfcEnabled={simulateNfc}
+            onClose={() => {
+              setSelected(null);
+              setPartyReadyIds((ids) => ids.filter((id) => id !== selected.id));
+            }}
+            onComplete={() => setJoined((c) => (c.includes(selected.id) ? c : [...c, selected.id]))}
+          />
+        )}
 
       {selected && !joined.includes(selected.id) && (
         <div className="modal-backdrop" onClick={() => setSelected(null)}>
@@ -427,7 +491,7 @@ export default function Home() {
             </button>
             <span className="quest-icon large">{selected.icon}</span>
             <p className="eyebrow">
-              {selected.type} QUEST · {selected.xp} GRUND-CHIP + TIDSBONUS
+              {selected.type === "LAG" ? "LAGUPPDRAG" : selected.type === "EVENT" ? "EVENT" : "SOLOUPPDRAG"} · {selected.xp} grund-Chip + tidsbonus
             </p>
             <h2>{selected.title}</h2>
             <p>{selected.description}</p>
@@ -453,8 +517,10 @@ export default function Home() {
             </div>
             <button className="primary full" onClick={() => acceptQuest(selected)}>
               {selected.gameMode === "silence" || selected.id === 5
-                ? "ANTA & STARTA TYSTNADSUPPDRAG"
-                : "ANTA & STARTA TIDEN"}
+                ? "ANTA & ÖPPNA LAGLOBBY"
+                : partySizeForQuest(selected.id, selected.type) > 1
+                  ? "ANTA & ÖPPNA LAGLOBBY"
+                  : "ANTA & STARTA TIDEN"}
             </button>
           </section>
         </div>
@@ -487,10 +553,17 @@ export default function Home() {
             </div>
             <p className="eyebrow">NFC-LÄSARE REDO</p>
             <h2>Håll mobilen mot brickan</h2>
-            <p>På en riktig station öppnas rätt quest direkt via brickans unika webblänk.</p>
+            <p>
+              NFC öppnar stationen automatiskt. Saknar du NFC? Ange stationskod från brickan i
+              stället — ingen QR som går att fota på avstånd.
+            </p>
+            <a className="primary full" href="/scan" style={{ textDecoration: "none" }}>
+              INGEN NFC? ANGE STATIONSKOD
+            </a>
             {simulateNfc ? (
               <button
-                className="ghost"
+                className="ghost full"
+                style={{ marginTop: 10 }}
                 onClick={async () => {
                   const player = getPlayer();
                   if (!player) {

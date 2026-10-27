@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { defaultQuestData } from "../defaultQuestData";
+import AdminNfcPanel from "./nfc-panel";
 
 type UnlockMetric = "scans" | "xp" | "none" | "";
 type PuzzleStep = {
@@ -298,7 +299,7 @@ export default function AdminQuestEditor() {
           {(
             [
               ["quests", "Uppdrag"],
-              ["tags", "NFC-taggar"],
+              ["tags", "NFC-brickor"],
               ["unlocks", "Upplåsning"],
             ] as const
           ).map(([id, label]) => (
@@ -308,14 +309,16 @@ export default function AdminQuestEditor() {
           ))}
         </div>
 
-        <label className="admin-toggle">
-          <input
-            type="checkbox"
-            checked={simulateNfc}
-            onChange={(e) => saveSettings(e.target.checked, unlocks)}
-          />
-          <span>Tillåt simulera NFC (för test utan brickor)</span>
-        </label>
+        {tab !== "tags" && (
+          <label className="admin-toggle">
+            <input
+              type="checkbox"
+              checked={simulateNfc}
+              onChange={(e) => saveSettings(e.target.checked, unlocks)}
+            />
+            <span>Tillåt simulera NFC (för test utan brickor)</span>
+          </label>
+        )}
 
         {tab === "quests" && (
           <>
@@ -378,31 +381,7 @@ export default function AdminQuestEditor() {
               />
               <button type="submit">LÄGG TILL TAGG</button>
             </form>
-            {tags.map((t) => (
-              <article className="admin-quest" key={t.id}>
-                <div>
-                  <span className="status published">{t.id}</span>
-                  <h3>{t.name}</h3>
-                  <p>
-                    /scan?station={t.stationKey} · {t.location || "—"}
-                  </p>
-                </div>
-                <div className="admin-actions">
-                  <button
-                    onClick={async () => {
-                      await fetch(`/api/admin/tags/${t.id}`, {
-                        method: "PATCH",
-                        headers: { "content-type": "application/json" },
-                        body: JSON.stringify({ active: !t.active }),
-                      });
-                      load();
-                    }}
-                  >
-                    {t.active ? "INAKTIVERA" : "AKTIVERA"}
-                  </button>
-                </div>
-              </article>
-            ))}
+            <AdminNfcPanel />
           </div>
         )}
 

@@ -8,5 +8,5 @@ export const defaultQuestData = [
   {sourceKey:"builtin-7",title:"Minnesglitch",type:"SOLO",place:"TV-spel under läktaren",xp:300,description:"Memorera färgsekvensen och återskapa den i mobilen."},
   {sourceKey:"builtin-8",title:"Den falska noden",type:"SOLO",place:"Tre publika platser",xp:360,description:"Tre noder ger påståenden, men en av dem ljuger."},
   {sourceKey:"builtin-9",title:"Hemlig agent",type:"LAG",place:"Ledarbärare → TV-hörnan",xp:480,description:"En spelare får ett dolt sidouppdrag och leder laget utan att avslöja sin roll."},
-  {sourceKey:"builtin-10",title:"Community unlock",type:"EVENT",place:"Alla publika zoner",xp:800,description:"Alla deltagares skanningar laddar en gemensam energimätare."},
+  {sourceKey:"builtin-10",title:"Community-upplåsning",type:"EVENT",place:"Alla publika zoner",xp:800,description:"Alla deltagares skanningar laddar en gemensam energimätare."},
 ] as const;

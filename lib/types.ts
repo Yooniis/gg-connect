@@ -75,6 +75,8 @@ export type NfcTag = {
   name: string;
   stationKey: string;
   location: string;
+  /** Short code on the physical sticker — required for manual check-in (anti-share). */
+  accessCode: string;
   active: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -90,6 +92,8 @@ export type CommunityUnlockRule = {
 export type GameSettings = {
   simulateNfcEnabled: boolean;
   unlocks: CommunityUnlockRule[];
+  /** Bump to roll out new default unlock ladder without wiping custom admin edits forever */
+  progressionVersion?: number;
   updatedAt?: string;
 };
 
@@ -105,13 +109,22 @@ export type Activity = {
 /** Display name for the player currency (stored as `xp` in Firestore). */
 export const CURRENCY = "Chip";
 
-/** Default unlock ladder: 6–9 by scans, boss (4) by community Chip */
+/**
+ * Progression for ~40 spelare.
+ * Max unika skanningar ≈ 40 × 10 noder = 400.
+ * Boss via community-Chip så den kan låsas upp när som under kvällen.
+ */
+export const PROGRESSION_VERSION = 2;
+
 export const DEFAULT_COMMUNITY_UNLOCKS: CommunityUnlockRule[] = [
-  { at: 25, title: "Signalstafetten", questId: 6, metric: "scans" },
-  { at: 75, title: "Minnesglitch", questId: 7, metric: "scans" },
-  { at: 150, title: "Den falska noden", questId: 8, metric: "scans" },
-  { at: 250, title: "Hemlig agent", questId: 9, metric: "scans" },
-  { at: 15000, title: "Boss raid: Blackout", questId: 4, metric: "xp" },
+  { at: 40, title: "Signalstafetten", questId: 6, metric: "scans" },
+  { at: 90, title: "Minnesglitch", questId: 7, metric: "scans" },
+  { at: 140, title: "Kodspegeln", questId: 11, metric: "scans" },
+  { at: 200, title: "Den falska noden", questId: 8, metric: "scans" },
+  { at: 12000, title: "Pixelchiffer", questId: 15, metric: "xp" },
+  { at: 260, title: "Hemlig agent", questId: 9, metric: "scans" },
+  { at: 20000, title: "Nodväxeln", questId: 13, metric: "xp" },
+  { at: 32000, title: "Boss raid: Blackout", questId: 4, metric: "xp" },
 ];
 
 /** @deprecated use DEFAULT_COMMUNITY_UNLOCKS — kept for gradual migration */
@@ -130,20 +143,52 @@ export const BUILTIN_QUEST_REWARDS: Record<number, { xp: number; target: number 
   8: { xp: 360, target: 480 },
   9: { xp: 480, target: 720 },
   10: { xp: 800, target: 1800 },
+  11: { xp: 340, target: 480 },
+  12: { xp: 280, target: 420 },
+  13: { xp: 640, target: 900 },
+  14: { xp: 400, target: 600 },
+  15: { xp: 380, target: 540 },
 };
 
+const ACCESS_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+/** Stable sticker code derived from stationKey (so reprints stay consistent). */
+export function accessCodeForStation(stationKey: string) {
+  let h = 2166136261;
+  for (let i = 0; i < stationKey.length; i++) {
+    h ^= stationKey.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  let out = "";
+  let x = h >>> 0;
+  for (let i = 0; i < 4; i++) {
+    out += ACCESS_ALPHABET[x % ACCESS_ALPHABET.length];
+    x = Math.floor(x / ACCESS_ALPHABET.length) + 17;
+  }
+  return out;
+}
+
+export function normalizeAccessCode(value: string) {
+  return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
 export const DEFAULT_NFC_TAGS: Omit<NfcTag, "createdAt" | "updatedAt">[] = [
-  { id: "tag-001", name: "Kapphängning", stationKey: "kapphangning", location: "Nedre foajé", active: true },
-  { id: "tag-002", name: "Soffgrupp nedre", stationKey: "soffor-nedre", location: "Nedre foajé", active: true },
-  { id: "tag-003", name: "Fejkad eldstad", stationKey: "eldstad", location: "Övre foajé", active: true },
-  { id: "tag-004", name: "Övre ståbord", stationKey: "stabord-ovre", location: "Övre foajé", active: true },
-  { id: "tag-005", name: "TV-spel under läktaren", stationKey: "tv-spel", location: "Skeppet", active: true },
-  { id: "tag-006", name: "TV-hörna", stationKey: "tv-horna", location: "Skeppet", active: true },
-  { id: "tag-007", name: "Sällskapsspel gradäng", stationKey: "sallskapsspel", location: "Skeppet", active: true },
-  { id: "tag-008", name: "Scen publik sida", stationKey: "scen-publik", location: "Skeppet", active: true },
-  { id: "tag-009", name: "Utomhus entré", stationKey: "utomhus-entre", location: "Utomhus", active: true },
-  { id: "tag-010", name: "Vandrande ledartagg", stationKey: "ledare", location: "Rörlig", active: true },
+  { id: "tag-001", name: "Kapphängning", stationKey: "kapphangning", location: "Nedre foajé", accessCode: accessCodeForStation("kapphangning"), active: true },
+  { id: "tag-002", name: "Soffgrupp nedre", stationKey: "soffor-nedre", location: "Nedre foajé", accessCode: accessCodeForStation("soffor-nedre"), active: true },
+  { id: "tag-003", name: "Fejkad eldstad", stationKey: "eldstad", location: "Övre foajé", accessCode: accessCodeForStation("eldstad"), active: true },
+  { id: "tag-004", name: "Övre ståbord", stationKey: "stabord-ovre", location: "Övre foajé", accessCode: accessCodeForStation("stabord-ovre"), active: true },
+  { id: "tag-005", name: "TV-spel under läktaren", stationKey: "tv-spel", location: "Skeppet", accessCode: accessCodeForStation("tv-spel"), active: true },
+  { id: "tag-006", name: "TV-hörna", stationKey: "tv-horna", location: "Skeppet", accessCode: accessCodeForStation("tv-horna"), active: true },
+  { id: "tag-007", name: "Sällskapsspel gradäng", stationKey: "sallskapsspel", location: "Skeppet", accessCode: accessCodeForStation("sallskapsspel"), active: true },
+  { id: "tag-008", name: "Scen publik sida", stationKey: "scen-publik", location: "Skeppet", accessCode: accessCodeForStation("scen-publik"), active: true },
+  { id: "tag-009", name: "Utomhus entré", stationKey: "utomhus-entre", location: "Utomhus", accessCode: accessCodeForStation("utomhus-entre"), active: true },
+  { id: "tag-010", name: "Vandrande ledartagg", stationKey: "ledare", location: "Rörlig", accessCode: accessCodeForStation("ledare"), active: true },
 ];
+
+export function nfcScanUrl(origin: string, tag: Pick<NfcTag, "stationKey" | "accessCode">) {
+  const base = origin.replace(/\/$/, "");
+  return `${base}/scan?station=${encodeURIComponent(tag.stationKey)}&k=${encodeURIComponent(tag.accessCode)}`;
+}
 
 export function nameKey(name: string) {
   return name.trim().toLocaleLowerCase("sv-SE");
@@ -182,3 +227,68 @@ export function parseStepLabels(raw: string | string[] | null | undefined): stri
     return raw ? [String(raw)] : [];
   }
 }
+
+/** How many players must be in the lobby before a multiplayer quest can start. */
+export const QUEST_PARTY_SIZE: Record<number, number> = {
+  2: 3, // Synkronisera nätverket
+  5: 2, // Tyst kommunikation
+  6: 3, // Signalstafetten
+  9: 2, // Hemlig agent
+  13: 3, // Nodväxeln
+};
+
+export function partySizeForQuest(questId: number, type?: string | null) {
+  if (QUEST_PARTY_SIZE[questId]) return QUEST_PARTY_SIZE[questId];
+  if (String(type || "").toUpperCase() === "LAG") return 2;
+  return 1;
+}
+
+export type QuestLobbyMember = {
+  name: string;
+  token: string;
+  slot: number;
+  ready: boolean;
+  joinedAt: string;
+};
+
+export type QuestLobbyPending = {
+  name: string;
+  token: string;
+  requestedAt: string;
+};
+
+export type QuestLobbyStatus = "open" | "forming" | "running" | "closed";
+
+export type QuestLobby = {
+  id: string;
+  questId: number;
+  questTitle: string;
+  requiredPlayers: number;
+  hostToken: string;
+  hostName: string;
+  status: QuestLobbyStatus;
+  members: QuestLobbyMember[];
+  /** Join requests waiting for host acceptance — not in the team yet */
+  pending: QuestLobbyPending[];
+  /** token -> assigned role/clue slot (set when running) */
+  assignments: Record<string, number>;
+  /** Shared node scans for sync-style quests (index = slot) */
+  scans?: boolean[];
+  /** Shared deadline for the 10-second sync window */
+  windowEndsAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string | null;
+};
+
+/** Split clues for Tyst kommunikation — never show both to one player. Answer: BLÅ7 */
+export const SILENCE_CLUES = [
+  "FÄRGEN FINNS OVANFÖR MOLNEN",
+  "TALET KOMMER EFTER SEX",
+] as const;
+
+export const SYNC_NODE_ROLES = [
+  "Kapphängningen (nedre foajén)",
+  "Fejkade eldstaden (övre foajén)",
+  "TV-spelen under läktaren",
+] as const;

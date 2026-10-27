@@ -38,8 +38,8 @@ export default function QuestRunner({
   const required = quest.tags || [];
   const steps = quest.puzzleSteps || [];
   const [scanned, setScanned] = useState<string[]>([]);
-  const [phase, setPhase] = useState<"nfc" | "puzzle" | "done">(
-    quest.requireScan !== false && required.length ? "nfc" : steps.length ? "puzzle" : "done",
+  const [phase, setPhase] = useState<"nfc" | "puzzle" | "confirm" | "done">(
+    quest.requireScan !== false && required.length ? "nfc" : steps.length ? "puzzle" : "confirm",
   );
   const [stepIndex, setStepIndex] = useState(0);
   const [answer, setAnswer] = useState("");
@@ -66,7 +66,7 @@ export default function QuestRunner({
         } else if (steps.length) {
           setPhase("puzzle");
         } else {
-          setPhase("done");
+          setPhase("confirm");
         }
       })
       .catch(() => {});
@@ -139,6 +139,11 @@ export default function QuestRunner({
     setBusy(false);
     if (data?.error) {
       setError(data.error);
+      const failed = steps.findIndex((s) => s.id === data.stepId);
+      if (failed >= 0) {
+        setPhase("puzzle");
+        setStepIndex(failed);
+      }
       return;
     }
     setPhase("done");
@@ -151,13 +156,13 @@ export default function QuestRunner({
         <button className="close" onClick={onClose}>
           ×
         </button>
-        <p className="eyebrow">LIVE QUEST · NFC + PUZZEL</p>
+        <p className="eyebrow">LIVE UPPDRAG · NFC + PUSSEL</p>
         <h2>{quest.title}</h2>
 
         {phase === "nfc" && (
           <div className="game-body">
             <span className="game-kicker">
-              SKANNA {scanned.length}/{required.length} TAGGA
+              SKANNA {scanned.length}/{required.length} TAGGAR
             </span>
             <p>Skanning krävs innan du får gå vidare. Håll mobilen mot brickan – eller simulera om det är aktiverat.</p>
             <div className="tag-scan-list">
@@ -187,7 +192,10 @@ export default function QuestRunner({
               })}
             </div>
             {!remaining.length && (
-              <button className="primary full" onClick={() => (steps.length ? setPhase("puzzle") : finish([]))}>
+              <button
+                className="primary full"
+                onClick={() => (steps.length ? setPhase("puzzle") : setPhase("confirm"))}
+              >
                 FORTSÄTT
               </button>
             )}
@@ -229,13 +237,23 @@ export default function QuestRunner({
           </div>
         )}
 
+        {phase === "confirm" && (
+          <div className="game-body">
+            <h3>Bekräfta att uppdraget är klart</h3>
+            <p>Chip registreras först när du bekräftar. Det går bara att hämta en gång.</p>
+            <button className="primary full" disabled={busy} onClick={() => finish([])}>
+              {busy ? "SPARAR…" : "SLUTFÖR UPPDRAG"}
+            </button>
+          </div>
+        )}
+
         {phase === "done" && (
           <div className="game-result">
             <div className="result-mark success">✓</div>
-            <h3>Quest slutförd!</h3>
-            <p>Din insats är registrerad och poängen har lagts till.</p>
+            <h3>Uppdrag slutfört!</h3>
+            <p>Din insats är registrerad och Chip har lagts till.</p>
             <button className="primary full" onClick={onClose}>
-              TILLBAKA TILL QUESTS
+              TILLBAKA TILL UPPDRAG
             </button>
           </div>
         )}

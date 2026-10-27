@@ -7,16 +7,23 @@ import {
   DEFAULT_NFC_TAGS,
   GameSettings,
   NfcTag,
+  PROGRESSION_VERSION,
   Player,
   PlayerProfile,
   PuzzleStep,
   Quest,
   UnlockMetric,
+  QuestLobby,
+  QuestLobbyMember,
+  QuestLobbyPending,
+  accessCodeForStation,
   compositeKey,
   nameKey,
+  normalizeAccessCode,
   normalizeAnswer,
   nowIso,
   parsePuzzleSteps,
+  partySizeForQuest,
 } from "./types";
 
 const DEFAULT_QUESTS = [
@@ -29,7 +36,7 @@ const DEFAULT_QUESTS = [
   ["builtin-7", "Minnesglitch", "SOLO", "TV-spel under läktaren", 300, "Skanna minnesnoden vid TV-spelsstationerna under läktaren. Memorera färgsekvensen och återskapa den i mobilen.", ["Hitta minnesnoden under läktaren", "Memorera färgernas ordning", "Återskapa sekvensen utan en ny titt"]],
   ["builtin-8", "Den falska noden", "SOLO", "Tre publika platser", 360, "Samla påståenden vid kapphängningen, övre foajéns ståbord och TV-hörnan bredvid scenen. En nod ljuger.", ["Skanna de tre publika noderna", "Jämför deras påståenden", "Peka ut den falska noden"]],
   ["builtin-9", "Hemlig agent", "LAG", "Ledarbärare → TV-hörnan", 480, "En spelare får ett dolt uppdrag från den vandrande ledartaggen och ska styra laget mot TV-hörnan utan att avslöja sin roll.", ["Hitta en ledare med den vandrande taggen", "Öppna din hemliga roll diskret", "Slutför uppdraget vid TV-hörnan"]],
-  ["builtin-10", "Community unlock", "EVENT", "Alla publika zoner", 800, "Unika skanningar utomhus, i båda foajéerna och i Skeppet laddar LAN-kärnan. Förbjudna och privata rum används aldrig.", ["Hitta en aktiv nod i en publik zon", "Registrera en unik skanning", "Hjälp hela LAN:et låsa upp bonusuppdraget"]],
+  ["builtin-10", "Community-upplåsning", "EVENT", "Alla publika zoner", 800, "Unika skanningar utomhus, i båda foajéerna och i Skeppet laddar LAN-kärnan. Förbjudna och privata rum används aldrig.", ["Hitta en aktiv nod i en publik zon", "Registrera en unik skanning", "Hjälp hela LAN:et låsa upp bonusuppdraget"]],
 ] as const;
 
 function db() {
@@ -87,11 +94,13 @@ function questFromDoc(id: number, data: Record<string, unknown>): Quest {
 }
 
 function tagFromDoc(id: string, data: Record<string, unknown>): NfcTag {
+  const stationKey = String(data.stationKey || id);
   return {
     id,
     name: String(data.name || ""),
-    stationKey: String(data.stationKey || id),
+    stationKey,
     location: String(data.location || ""),
+    accessCode: normalizeAccessCode(String(data.accessCode || "")) || accessCodeForStation(stationKey),
     active: data.active !== false,
     createdAt: data.createdAt as string | undefined,
     updatedAt: data.updatedAt as string | undefined,
@@ -194,8 +203,8 @@ const QUEST_SEED_META: Record<
       {
         id: "s1",
         type: "text",
-        prompt: "Efter ledartaggen: vilket kodord fick du? (THE GLITCH)",
-        answer: "the glitch",
+        prompt: "Efter ledartaggen: vilket kodord fick du?",
+        answer: "glitchen",
         tagId: "tag-010",
       },
       {
@@ -212,7 +221,93 @@ const QUEST_SEED_META: Record<
     gameMode: "custom",
     puzzleSteps: [],
   },
+  11: {
+    tagIds: ["tag-004"],
+    gameMode: "custom",
+    puzzleSteps: [
+      {
+        id: "s1",
+        type: "code",
+        prompt: "Spegeln visar koden baklänges. Brickan säger RAKP — vad är rätt riktning?",
+        answer: "park",
+        tagId: "tag-004",
+      },
+    ],
+  },
+  12: {
+    tagIds: ["tag-009"],
+    gameMode: "custom",
+    puzzleSteps: [
+      {
+        id: "s1",
+        type: "choice",
+        prompt: "Utomhusnoden blinkar: 19:45 → ??. Vilken lokal tid ska du ange?",
+        tagId: "tag-009",
+        choices: [
+          { id: "a", label: "20:00", correct: false },
+          { id: "b", label: "21:00", correct: false },
+          { id: "c", label: "19:45", correct: true },
+        ],
+      },
+      {
+        id: "s2",
+        type: "text",
+        prompt: "Skriv kvällens lösenord som noden viskar (BLACKOUT).",
+        answer: "blackout",
+      },
+    ],
+  },
+  13: {
+    tagIds: ["tag-001", "tag-005", "tag-008"],
+    gameMode: "custom",
+    puzzleSteps: [
+      {
+        id: "s1",
+        type: "code",
+        prompt: "Skanna noderna i rätt ordning. Slutkoden är första bokstaven i varje plats: Kapphängning, TV-spel, Scen.",
+        answer: "kts",
+      },
+    ],
+  },
+  14: {
+    tagIds: ["tag-002"],
+    gameMode: "custom",
+    puzzleSteps: [
+      {
+        id: "s1",
+        type: "choice",
+        prompt: "Vilken sekvens laddar kärnan säkrast?",
+        tagId: "tag-002",
+        choices: [
+          { id: "a", label: "Skanna → vänta → skanna → klart", correct: false },
+          { id: "b", label: "Tre unika noder, tre olika spelare", correct: true },
+          { id: "c", label: "Samma nod tio gånger", correct: false },
+        ],
+      },
+    ],
+  },
+  15: {
+    tagIds: ["tag-003"],
+    gameMode: "custom",
+    puzzleSteps: [
+      {
+        id: "s1",
+        type: "code",
+        prompt: "Pixelvägen: höger, ner, höger. På knappsatsen blir det…",
+        answer: "262",
+        tagId: "tag-003",
+      },
+    ],
+  },
 };
+
+const EXTRA_QUESTS = [
+  ["builtin-11", "Kodspegeln", "SOLO", "Övre ståbord", 340, "En kod speglas baklänges på ståbordsnoden. Vänd den rätt.", ["Hitta övre ståbord", "Läs spegelkoden", "Ange rätt riktning"]],
+  ["builtin-12", "Tidsglitch", "SOLO", "Utomhus entré", 280, "Entrénodens klocka ljuger ibland. Läs signalen och bekräfta kvällens lösenord.", ["Skanna utomhusnoden", "Tolka tidssignalen", "Ange lösenordet"]],
+  ["builtin-13", "Nodväxeln", "LAG", "Tre zoner", 640, "Tre spelare aktiverar kapphängning, TV-spel och scen i samma runda och knäcker platsbokstäverna.", ["Dela upp er på tre noder", "Skanna alla tre", "Skriv ihop bokstavskoden"]],
+  ["builtin-14", "Kärnprovet", "SOLO", "Soffgrupp nedre", 400, "Ett kunskapstest om hur communityn faktiskt laddar kärnan.", ["Skanna soffgruppen", "Svara rätt på kärnfrågan"]],
+  ["builtin-15", "Pixelchiffer", "SOLO", "Fejkad eldstad", 380, "Översätt pixelvägen till siffror som på en knappsats.", ["Skanna eldstaden", "Tolka pixelvägen", "Ange tresiffrig kod"]],
+] as const;
 
 export async function ensureDefaults() {
   const community = db().collection("communityState").doc("default");
@@ -227,8 +322,18 @@ export async function ensureDefaults() {
     await settingsRef.set({
       simulateNfcEnabled: true,
       unlocks: DEFAULT_COMMUNITY_UNLOCKS,
+      progressionVersion: PROGRESSION_VERSION,
       updatedAt: nowIso(),
     } satisfies GameSettings);
+  } else if (Number(settingsSnap.data()?.progressionVersion || 0) < PROGRESSION_VERSION) {
+    await settingsRef.set(
+      {
+        unlocks: DEFAULT_COMMUNITY_UNLOCKS,
+        progressionVersion: PROGRESSION_VERSION,
+        updatedAt: nowIso(),
+      },
+      { merge: true },
+    );
   }
 
   const tagBatch = db().batch();
@@ -238,6 +343,13 @@ export async function ensureDefaults() {
     const snap = await ref.get();
     if (!snap.exists) {
       tagBatch.set(ref, { ...tag, createdAt: nowIso(), updatedAt: nowIso() });
+      tagWrites++;
+    } else if (!snap.data()?.accessCode) {
+      tagBatch.set(
+        ref,
+        { accessCode: tag.accessCode || accessCodeForStation(tag.stationKey), updatedAt: nowIso() },
+        { merge: true },
+      );
       tagWrites++;
     }
   }
@@ -284,6 +396,9 @@ export async function ensureDefaults() {
       if (data.puzzleSteps == null && meta) patch.puzzleSteps = JSON.stringify(meta.puzzleSteps);
       if (data.gameMode == null && meta) patch.gameMode = meta.gameMode;
       if (data.requireScan == null) patch.requireScan = (meta?.tagIds?.length || 0) > 0;
+      // Fix known outdated Swedish seed copy without wiping admin edits
+      if (data.title === "Community unlock") patch.title = title;
+      if (String(data.description || "").includes("Entrénodes")) patch.description = description;
       if (Object.keys(patch).length) {
         patch.updatedAt = nowIso();
         batch.set(ref, patch, { merge: true });
@@ -292,6 +407,43 @@ export async function ensureDefaults() {
     }
   }
   if (writes) await batch.commit();
+
+  const extraBatch = db().batch();
+  let extraWrites = 0;
+  for (let i = 0; i < EXTRA_QUESTS.length; i++) {
+    const [sourceKey, title, type, place, xp, description, steps] = EXTRA_QUESTS[i];
+    const id = 11 + i;
+    const meta = QUEST_SEED_META[id];
+    const ref = db().collection("quests").doc(String(id));
+    const snap = await ref.get();
+    if (snap.exists) continue;
+    extraBatch.set(ref, {
+      sourceKey,
+      title,
+      type,
+      place,
+      xp,
+      description,
+      steps: JSON.stringify(steps),
+      puzzleSteps: JSON.stringify(meta?.puzzleSteps || []),
+      tagIds: meta?.tagIds || [],
+      requireScan: (meta?.tagIds?.length || 0) > 0,
+      gameMode: meta?.gameMode || "custom",
+      unlockMetric: null,
+      unlockAt: null,
+      status: "published",
+      createdBy: "system@goodgame",
+      hintCost: 100,
+      hintText: "",
+      hintImageKey: null,
+      startsAt: null,
+      endsAt: null,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+    extraWrites++;
+  }
+  if (extraWrites) await extraBatch.commit();
 
   const counter = db().collection("counters").doc("quests");
   const counterSnap = await counter.get();
@@ -357,16 +509,20 @@ export async function createTag(input: {
   name: string;
   stationKey: string;
   location?: string;
+  accessCode?: string;
   active?: boolean;
 }) {
   const idNum = await nextCounter("nfcTags", 100);
   const id = `tag-${String(idNum).padStart(3, "0")}`;
   const stamp = nowIso();
+  const stationKey = input.stationKey.trim().slice(0, 80) || id;
   const tag: NfcTag = {
     id,
     name: input.name.trim(),
-    stationKey: input.stationKey.trim().slice(0, 80) || id,
+    stationKey,
     location: (input.location || "").trim(),
+    accessCode:
+      normalizeAccessCode(input.accessCode || "") || accessCodeForStation(stationKey),
     active: input.active !== false,
     createdAt: stamp,
     updatedAt: stamp,
@@ -383,9 +539,31 @@ export async function updateTag(id: string, changes: Partial<NfcTag>) {
   if (changes.name !== undefined) patch.name = String(changes.name).trim();
   if (changes.stationKey !== undefined) patch.stationKey = String(changes.stationKey).trim().slice(0, 80);
   if (changes.location !== undefined) patch.location = String(changes.location).trim();
+  if (changes.accessCode !== undefined) {
+    patch.accessCode = normalizeAccessCode(String(changes.accessCode));
+  }
   if (changes.active !== undefined) patch.active = Boolean(changes.active);
   await ref.set(patch, { merge: true });
   return getTag(id);
+}
+
+export async function verifyStationAccess(stationKey: string, accessCode: string) {
+  const isSim = stationKey === "simulator" || stationKey.startsWith("sim-");
+  if (isSim) return { ok: true as const, tag: null, simulated: true as const };
+  const tag = await getTagByStationKey(stationKey);
+  if (!tag || !tag.active) {
+    return { ok: false as const, error: "Okänd eller inaktiv station.", status: 404 as const };
+  }
+  const expected = normalizeAccessCode(tag.accessCode);
+  const given = normalizeAccessCode(accessCode);
+  if (!given || given !== expected) {
+    return {
+      ok: false as const,
+      error: "Fel stationskod. Läs koden på brickan (inte en fotoad QR).",
+      status: 403 as const,
+    };
+  }
+  return { ok: true as const, tag, simulated: false as const };
 }
 
 export async function deleteTag(id: string) {
@@ -501,20 +679,36 @@ export async function getPlayer(name: string): Promise<Player | null> {
 }
 
 export async function playerCookieToken(request: Request) {
-  return decodeURIComponent(
+  const header = String(request.headers.get("x-gg-token") || "").trim();
+  const fromCookie = decodeURIComponent(
     (request.headers.get("cookie") || "").match(/(?:^|; )gg_player=([^;]+)/)?.[1] || "",
   );
+  return header || fromCookie;
 }
 
-export async function sessionFromRequest(request: Request, fallback = "") {
-  const token = await playerCookieToken(request);
-  if (!token) return { name: fallback, team: "Solo", token: "" };
+export async function sessionFromRequest(
+  request: Request,
+  _fallback = "",
+  tokenOverride = "",
+) {
+  const token = String(tokenOverride || "").trim() || (await playerCookieToken(request));
+  if (!token) return { name: "", team: "Solo", token: "" };
   const profile = await getProfileByToken(token);
+  if (!profile) return { name: "", team: "Solo", token: "" };
   return {
-    name: profile?.name || fallback,
-    team: profile?.team || "Solo",
-    token,
+    name: profile.name,
+    team: profile.team || "Solo",
+    token: profile.token,
   };
+}
+
+function samePlayer(
+  a: { token?: string; name?: string },
+  b: { token?: string; name?: string },
+) {
+  if (a.token && b.token && a.token === b.token) return true;
+  if (a.name && b.name && nameKey(a.name) === nameKey(b.name)) return true;
+  return false;
 }
 
 export async function upsertPlayerProfile(input: {
@@ -749,10 +943,17 @@ export async function acceptQuest(name: string, questId: number) {
   }
 
   const ref = db().collection("questAcceptances").doc(compositeKey(name, questId));
+  const doneRef = db().collection("questCompletions").doc(compositeKey(name, questId));
   let startedNow = false;
   await db().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
-    if (snap.exists) return;
+    const done = await tx.get(doneRef);
+    if (done.exists) return;
+    // Refresh start time when re-opening an unfinished quest (avoids "518:55"-style times)
+    if (snap.exists) {
+      tx.set(ref, { acceptedAt: nowIso() }, { merge: true });
+      return;
+    }
     startedNow = true;
     tx.set(ref, {
       playerName: name,
@@ -823,21 +1024,32 @@ export function validatePuzzleAnswers(steps: PuzzleStep[], answers: { stepId: st
   for (const step of steps) {
     const given = map.get(step.id);
     if (given == null || String(given).trim() === "") {
-      return { ok: false as const, error: `Steg saknas: ${step.prompt.slice(0, 40)}` };
+      return { ok: false as const, error: `Steg saknas: ${step.prompt.slice(0, 40)}`, stepId: step.id };
     }
     if (step.type === "choice") {
       const choice = (step.choices || []).find((c) => c.id === given || c.label === given);
       if (!choice?.correct) {
-        return { ok: false as const, error: "Fel svar på flervalsfråga." };
+        return { ok: false as const, error: "Fel svar på flervalsfråga.", stepId: step.id };
       }
     } else {
       const expected = normalizeAnswer(step.answer || "");
       if (!expected || normalizeAnswer(given) !== expected) {
-        return { ok: false as const, error: "Fel svar." };
+        return { ok: false as const, error: "Fel svar.", stepId: step.id };
       }
     }
   }
   return { ok: true as const };
+}
+
+async function playerHasContributedScan(name: string) {
+  const snaps = await db().collection("nfcScans").where("playerName", "==", name).limit(30).get();
+  if (snaps.empty) return false;
+  const settings = await getGameSettings();
+  return snaps.docs.some((d) => {
+    const key = String(d.data().stationKey || "");
+    const simulated = !key || key === "simulator" || key.startsWith("sim-");
+    return !simulated || settings.simulateNfcEnabled;
+  });
 }
 
 export async function completeQuest(input: {
@@ -867,6 +1079,17 @@ export async function completeQuest(input: {
     return { ok: false as const, error: "Ogiltig Chip-belöning", status: 400 as const };
   }
 
+  if (quest.sourceKey === "builtin-10" || questId === 10) {
+    const contributed = await playerHasContributedScan(name);
+    if (!contributed) {
+      return {
+        ok: false as const,
+        error: "Skanna minst en NFC-nod innan du hämtar community-belöningen.",
+        status: 403 as const,
+      };
+    }
+  }
+
   const acceptRef = db().collection("questAcceptances").doc(compositeKey(name, questId));
   const acceptSnap = await acceptRef.get();
   if (!acceptSnap.exists) {
@@ -877,8 +1100,11 @@ export async function completeQuest(input: {
     };
   }
 
+  const settings = await getGameSettings();
   const trustBuiltin =
-    skipPuzzleCheck && (quest.gameMode === "builtin" || quest.gameMode === "silence");
+    skipPuzzleCheck &&
+    (quest.gameMode === "silence" ||
+      (quest.gameMode === "builtin" && (settings.simulateNfcEnabled || questId === 2)));
   const requiredTags =
     !trustBuiltin && quest.requireScan !== false ? quest.tagIds || [] : [];
   if (requiredTags.length) {
@@ -898,7 +1124,7 @@ export async function completeQuest(input: {
   if (!skipPuzzleCheck && puzzles.length) {
     const check = validatePuzzleAnswers(puzzles, answers);
     if (!check.ok) {
-      return { ok: false as const, error: check.error, status: 400 as const };
+      return { ok: false as const, error: check.error, stepId: check.stepId, status: 400 as const };
     }
   }
 
@@ -944,7 +1170,15 @@ export async function completeQuest(input: {
   });
 
   if (awarded) {
-    await addActivity(name, "quest", `klarade ${title || quest.title} på ${formatTime(elapsed)}`, xp);
+    // Skip absurd durations (e.g. accepted hours earlier) — looks broken as "518:55"
+    const timePart =
+      elapsed <= 90 * 60 ? ` på ${formatTime(elapsed)}` : "";
+    await addActivity(
+      name,
+      "quest",
+      `klarade ${title || quest.title}${timePart}`,
+      xp,
+    );
     await maybeEmitUnlocks();
   }
 
@@ -972,7 +1206,7 @@ async function maybeEmitUnlocks(opts?: { announce?: boolean }) {
       newly.push(key);
       // Skip historical unlocks on first bootstrap so live screen isn't flooded
       if (announce && bootstrapped) {
-        await addActivity("COMMUNITY", "unlock", `låste upp ${rule.title}`, 0);
+        await addActivity("Communityn", "unlock", `låste upp ${rule.title}`, 0);
       }
     }
   }
@@ -999,8 +1233,13 @@ function timeBonus(base: number, elapsed: number, target: number) {
 }
 
 function formatTime(seconds: number) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
+  const total = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
@@ -1047,9 +1286,23 @@ export async function communitySnapshot() {
     createdAt: d.data().createdAt,
   }));
 
-  const nfcSnap = await db().collection("nfcScans").select("playerName", "stationKey").limit(5000).get();
-  const contributors = new Set(nfcSnap.docs.map((d) => d.data().playerName)).size;
-  const nodes = new Set(nfcSnap.docs.map((d) => d.data().stationKey)).size;
+  const nfcSnap = await db()
+    .collection("nfcScans")
+    .select("playerName", "stationKey")
+    .limit(5000)
+    .get();
+  const nfcPlayers = new Set(
+    nfcSnap.docs.map((d) => String(d.data().playerName || "")).filter(Boolean),
+  ).size;
+  const nodes = new Set(
+    nfcSnap.docs
+      .map((d) => String(d.data().stationKey || ""))
+      .filter((k) => k && !k.startsWith("sim-") && k !== "simulator"),
+  ).size;
+  // Players who have earned Chip (quests count even without NFC yet)
+  const playersSnap = await db().collection("players").select("xp").limit(2000).get();
+  const activePlayers = playersSnap.docs.filter((d) => Number(d.data().xp || 0) > 0).length;
+  const contributors = Math.max(nfcPlayers, activePlayers);
 
   const unlocks = settings.unlocks.map((u) => {
     const progress = unlockProgress(u, scans, totalXp);
@@ -1148,14 +1401,17 @@ export async function recordNfcScan(input: {
       const questId = Number(doc.data().questId);
       const quest = await getQuest(questId);
       if (!quest?.tagIds?.includes(tag.id)) continue;
-      await recordQuestTagScan({
-        name,
-        questId,
-        tagId: tag.id,
-        stationKey: tag.stationKey,
-      });
-      questTagProgress = { questId, tagId: tag.id };
-      break;
+      try {
+        await recordQuestTagScan({
+          name,
+          questId,
+          tagId: tag.id,
+          stationKey: tag.stationKey,
+        });
+        questTagProgress = { questId, tagId: tag.id };
+      } catch (err) {
+        console.error("quest tag scan", questId, err);
+      }
     }
   }
 
@@ -1319,4 +1575,573 @@ export async function readHintImage(key: string) {
     contentType: metadata.contentType || "application/octet-stream",
     etag: metadata.etag,
   };
+}
+
+function mapLobby(id: string, data: Record<string, unknown>): QuestLobby {
+  return {
+    id,
+    questId: Number(data.questId || 0),
+    questTitle: String(data.questTitle || ""),
+    requiredPlayers: Number(data.requiredPlayers || 2),
+    hostToken: String(data.hostToken || ""),
+    hostName: String(data.hostName || ""),
+    status: (data.status as QuestLobby["status"]) || "open",
+    members: Array.isArray(data.members) ? (data.members as QuestLobbyMember[]) : [],
+    pending: Array.isArray(data.pending) ? (data.pending as QuestLobbyPending[]) : [],
+    assignments: (data.assignments as Record<string, number>) || {},
+    scans: Array.isArray(data.scans) ? (data.scans as boolean[]) : [],
+    windowEndsAt: data.windowEndsAt ? String(data.windowEndsAt) : null,
+    createdAt: String(data.createdAt || nowIso()),
+    updatedAt: String(data.updatedAt || nowIso()),
+    startedAt: data.startedAt ? String(data.startedAt) : null,
+  };
+}
+
+const LOBBY_TTL_MS = 45 * 60 * 1000;
+
+export async function touchQuestPresence(input: {
+  questId: number;
+  name: string;
+  token: string;
+}) {
+  const id = `${input.questId}_${nameKey(input.name)}`;
+  await db()
+    .collection("questPresence")
+    .doc(id)
+    .set(
+      {
+        questId: input.questId,
+        name: input.name,
+        token: input.token,
+        updatedAt: nowIso(),
+      },
+      { merge: true },
+    );
+}
+
+export async function clearQuestPresence(questId: number, name: string) {
+  await db().collection("questPresence").doc(`${questId}_${nameKey(name)}`).delete();
+}
+
+export async function listQuestPresence(questId: number) {
+  const cutoff = Date.now() - 60_000;
+  const snaps = await db()
+    .collection("questPresence")
+    .where("questId", "==", questId)
+    .limit(80)
+    .get();
+  return snaps.docs
+    .map((d) => d.data())
+    .filter((d) => new Date(String(d.updatedAt || 0)).getTime() >= cutoff)
+    .map((d) => ({
+      name: String(d.name || ""),
+      token: String(d.token || ""),
+    }))
+    .filter((d) => d.name);
+}
+
+export async function listOpenLobbies(questId: number) {
+  const snaps = await db()
+    .collection("questLobbies")
+    .where("questId", "==", questId)
+    .limit(60)
+    .get();
+  const now = Date.now();
+  return snaps.docs
+    .map((d) => mapLobby(d.id, d.data() as Record<string, unknown>))
+    .filter(
+      (l) =>
+        (l.status === "open" || l.status === "forming") &&
+        now - new Date(l.updatedAt).getTime() < LOBBY_TTL_MS,
+    );
+}
+
+export async function getLobby(id: string) {
+  const snap = await db().collection("questLobbies").doc(id).get();
+  if (!snap.exists) return null;
+  return mapLobby(snap.id, (snap.data() || {}) as Record<string, unknown>);
+}
+
+export async function findPlayerLobby(
+  questId: number,
+  token: string,
+  name = "",
+): Promise<{ lobby: QuestLobby; membership: "member" | "pending" } | null> {
+  const me = { token, name };
+  const open = await listOpenLobbies(questId);
+  // Prefer newest lobby if duplicates exist
+  const sorted = [...open].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
+  const asMember = sorted.find((l) => l.members.some((m) => samePlayer(m, me)));
+  if (asMember) return { lobby: asMember, membership: "member" };
+  const asPending = sorted.find((l) => l.pending.some((p) => samePlayer(p, me)));
+  if (asPending) return { lobby: asPending, membership: "pending" };
+
+  const running = await db()
+    .collection("questLobbies")
+    .where("questId", "==", questId)
+    .where("status", "==", "running")
+    .limit(30)
+    .get();
+  for (const d of running.docs) {
+    const lobby = mapLobby(d.id, d.data() as Record<string, unknown>);
+    if (lobby.members.some((m) => samePlayer(m, me))) {
+      return { lobby, membership: "member" };
+    }
+  }
+  return null;
+}
+
+/** Close every open/forming lobby this player hosts or belongs to (except keepId). */
+async function closeOtherHostLobbies(
+  questId: number,
+  host: { token: string; name: string },
+  keepId?: string,
+) {
+  const open = await listOpenLobbies(questId);
+  const batch = db().batch();
+  let n = 0;
+  for (const lob of open) {
+    if (keepId && lob.id === keepId) continue;
+    const involves =
+      samePlayer({ token: lob.hostToken, name: lob.hostName }, host) ||
+      lob.members.some((m) => samePlayer(m, host)) ||
+      lob.pending.some((p) => samePlayer(p, host));
+    if (!involves) continue;
+    batch.set(
+      db().collection("questLobbies").doc(lob.id),
+      { status: "closed", pending: [], updatedAt: nowIso() },
+      { merge: true },
+    );
+    n++;
+  }
+  if (n) await batch.commit();
+}
+
+export async function createQuestLobby(input: {
+  questId: number;
+  questTitle: string;
+  questType?: string;
+  name: string;
+  token: string;
+}) {
+  // Reuse existing membership instead of spawning duplicate lobbies
+  const existing = await findPlayerLobby(input.questId, input.token, input.name);
+  if (existing?.membership === "member") {
+    return existing.lobby;
+  }
+
+  await closeOtherHostLobbies(input.questId, { token: input.token, name: input.name });
+
+  const required = partySizeForQuest(input.questId, input.questType);
+  const stamp = nowIso();
+  const member: QuestLobbyMember = {
+    name: input.name,
+    token: input.token,
+    slot: 0,
+    ready: false,
+    joinedAt: stamp,
+  };
+  const ref = db().collection("questLobbies").doc();
+  const lobby: QuestLobby = {
+    id: ref.id,
+    questId: input.questId,
+    questTitle: input.questTitle,
+    requiredPlayers: required,
+    hostToken: input.token,
+    hostName: input.name,
+    status: "open",
+    members: [member],
+    pending: [],
+    assignments: {},
+    createdAt: stamp,
+    updatedAt: stamp,
+    startedAt: null,
+  };
+  await ref.set(lobby);
+  await touchQuestPresence({
+    questId: input.questId,
+    name: input.name,
+    token: input.token,
+  });
+  return lobby;
+}
+
+/** Guest requests to join — stays pending until host accepts. */
+export async function joinQuestLobby(lobbyId: string, name: string, token: string) {
+  const ref = db().collection("questLobbies").doc(lobbyId);
+  return db().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return { ok: false as const, error: "Lobyn finns inte", status: 404 as const };
+    const lobby = mapLobby(snap.id, (snap.data() || {}) as Record<string, unknown>);
+    if (lobby.status !== "open" && lobby.status !== "forming") {
+      return { ok: false as const, error: "Lobyn är stängd", status: 409 as const };
+    }
+    if (lobby.members.some((m) => m.token === token)) {
+      return { ok: true as const, lobby, membership: "member" as const };
+    }
+    if (lobby.pending.some((p) => p.token === token)) {
+      return { ok: true as const, lobby, membership: "pending" as const };
+    }
+    if (lobby.members.length >= lobby.requiredPlayers) {
+      return { ok: false as const, error: "Lobyn är full", status: 409 as const };
+    }
+    const pending: QuestLobbyPending[] = [
+      ...lobby.pending,
+      { name, token, requestedAt: nowIso() },
+    ];
+    const next = { ...lobby, pending, updatedAt: nowIso() };
+    tx.set(ref, next, { merge: true });
+    return { ok: true as const, lobby: next, membership: "pending" as const };
+  });
+}
+
+/** Host accepts a pending join request into the team. */
+export async function acceptJoinRequest(
+  lobbyId: string,
+  hostToken: string,
+  applicantToken: string,
+) {
+  const ref = db().collection("questLobbies").doc(lobbyId);
+  return db().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return { ok: false as const, error: "Lobyn finns inte", status: 404 as const };
+    const lobby = mapLobby(snap.id, (snap.data() || {}) as Record<string, unknown>);
+    if (lobby.hostToken !== hostToken) {
+      return { ok: false as const, error: "Bara värden kan acceptera", status: 403 as const };
+    }
+    if (lobby.status === "running" || lobby.status === "closed") {
+      return { ok: false as const, error: "Lobyn är stängd", status: 409 as const };
+    }
+    if (lobby.members.length >= lobby.requiredPlayers) {
+      return { ok: false as const, error: "Lobyn är full", status: 409 as const };
+    }
+    const applicant = lobby.pending.find((p) => p.token === applicantToken);
+    if (!applicant) {
+      return { ok: false as const, error: "Ingen förfrågan från den spelaren", status: 404 as const };
+    }
+    if (lobby.members.some((m) => m.token === applicantToken)) {
+      const pending = lobby.pending.filter((p) => p.token !== applicantToken);
+      const next = { ...lobby, pending, updatedAt: nowIso() };
+      tx.set(ref, next, { merge: true });
+      return { ok: true as const, lobby: next };
+    }
+    const members: QuestLobbyMember[] = [
+      ...lobby.members,
+      {
+        name: applicant.name,
+        token: applicant.token,
+        slot: lobby.members.length,
+        ready: false,
+        joinedAt: nowIso(),
+      },
+    ];
+    const pending = lobby.pending.filter((p) => p.token !== applicantToken);
+    const next = {
+      ...lobby,
+      members,
+      pending,
+      status: members.length >= lobby.requiredPlayers ? ("forming" as const) : ("open" as const),
+      updatedAt: nowIso(),
+    };
+    tx.set(ref, next, { merge: true });
+    return { ok: true as const, lobby: next };
+  });
+}
+
+export async function declineJoinRequest(
+  lobbyId: string,
+  actorToken: string,
+  applicantToken: string,
+) {
+  const ref = db().collection("questLobbies").doc(lobbyId);
+  return db().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return { ok: false as const, error: "Lobyn finns inte", status: 404 as const };
+    const lobby = mapLobby(snap.id, (snap.data() || {}) as Record<string, unknown>);
+    const isHost = lobby.hostToken === actorToken;
+    const isSelf = actorToken === applicantToken;
+    if (!isHost && !isSelf) {
+      return { ok: false as const, error: "Inte tillåtet", status: 403 as const };
+    }
+    const pending = lobby.pending.filter((p) => p.token !== applicantToken);
+    const next = { ...lobby, pending, updatedAt: nowIso() };
+    tx.set(ref, next, { merge: true });
+    return { ok: true as const, lobby: next };
+  });
+}
+
+/** Host invites specific waiting players into their lobby (fills remaining seats). */
+export async function inviteToLobby(
+  lobbyId: string,
+  hostToken: string,
+  invitees: { name: string; token: string }[],
+) {
+  const ref = db().collection("questLobbies").doc(lobbyId);
+  return db().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return { ok: false as const, error: "Lobyn finns inte", status: 404 as const };
+    const lobby = mapLobby(snap.id, (snap.data() || {}) as Record<string, unknown>);
+    if (lobby.hostToken !== hostToken) {
+      return { ok: false as const, error: "Bara värden kan bjuda in", status: 403 as const };
+    }
+    if (lobby.status === "running" || lobby.status === "closed") {
+      return { ok: false as const, error: "Lobyn är stängd", status: 409 as const };
+    }
+    let members = [...lobby.members];
+    for (const inv of invitees) {
+      if (members.length >= lobby.requiredPlayers) break;
+      if (members.some((m) => m.token === inv.token || nameKey(m.name) === nameKey(inv.name))) {
+        continue;
+      }
+      members.push({
+        name: inv.name,
+        token: inv.token,
+        slot: members.length,
+        ready: false,
+        joinedAt: nowIso(),
+      });
+    }
+    const next = {
+      ...lobby,
+      members,
+      status: members.length >= lobby.requiredPlayers ? ("forming" as const) : ("open" as const),
+      updatedAt: nowIso(),
+    };
+    tx.set(ref, next, { merge: true });
+    return { ok: true as const, lobby: next };
+  });
+}
+
+/**
+ * Form a party by selecting exactly the required players from the waiting pool.
+ * Creator becomes host; selected players are pulled into one lobby.
+ */
+export async function formPartyFromSelection(input: {
+  questId: number;
+  questTitle: string;
+  questType?: string;
+  hostName: string;
+  hostToken: string;
+  selected: { name: string; token: string }[];
+}) {
+  const required = partySizeForQuest(input.questId, input.questType);
+  const host = { name: input.hostName, token: input.hostToken };
+  const unique = new Map<string, { name: string; token: string }>();
+  unique.set(input.hostToken, host);
+  for (const s of input.selected) {
+    if (!s.token || !s.name) continue;
+    if (samePlayer(s, host)) continue;
+    unique.set(s.token, s);
+  }
+  if (unique.size !== required) {
+    return {
+      ok: false as const,
+      error: `Välj exakt ${required - 1} lagkamrat${required - 1 === 1 ? "" : "er"} (totalt ${required}).`,
+      status: 400 as const,
+    };
+  }
+
+  // Close every open lobby that involves these players (stops duplicate-lobby loops)
+  const open = await listOpenLobbies(input.questId);
+  const party = [...unique.values()];
+  const batch = db().batch();
+  let batchOps = 0;
+  for (const lob of open) {
+    const touchesParty = lob.members.some((m) => party.some((p) => samePlayer(m, p))) ||
+      lob.pending.some((p) => party.some((x) => samePlayer(p, x))) ||
+      samePlayer({ token: lob.hostToken, name: lob.hostName }, host);
+    if (!touchesParty) continue;
+    batch.set(
+      db().collection("questLobbies").doc(lob.id),
+      { status: "closed", pending: [], updatedAt: nowIso() },
+      { merge: true },
+    );
+    batchOps++;
+  }
+  if (batchOps) await batch.commit();
+
+  const stamp = nowIso();
+  const members: QuestLobbyMember[] = party.map((p, i) => ({
+    name: p.name,
+    token: p.token,
+    slot: i,
+    ready: false,
+    joinedAt: stamp,
+  }));
+  const ref = db().collection("questLobbies").doc();
+  const lobby: QuestLobby = {
+    id: ref.id,
+    questId: input.questId,
+    questTitle: input.questTitle,
+    requiredPlayers: required,
+    hostToken: input.hostToken,
+    hostName: input.hostName,
+    status: "forming",
+    members,
+    pending: [],
+    assignments: {},
+    createdAt: stamp,
+    updatedAt: stamp,
+    startedAt: null,
+  };
+  await ref.set(lobby);
+  return { ok: true as const, lobby };
+}
+
+export async function setLobbyReady(
+  lobbyId: string,
+  token: string,
+  ready: boolean,
+  name = "",
+) {
+  const ref = db().collection("questLobbies").doc(lobbyId);
+  return db().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return { ok: false as const, error: "Lobyn finns inte", status: 404 as const };
+    const lobby = mapLobby(snap.id, (snap.data() || {}) as Record<string, unknown>);
+    if (lobby.status === "closed") {
+      return { ok: false as const, error: "Lobyn är stängd", status: 409 as const };
+    }
+    if (lobby.status === "running") return { ok: true as const, lobby };
+
+    const me = { token, name };
+    if (!lobby.members.some((m) => samePlayer(m, me))) {
+      return { ok: false as const, error: "Du är inte i den här lobbyn", status: 403 as const };
+    }
+    const members = lobby.members.map((m) =>
+      samePlayer(m, me) ? { ...m, token: token || m.token, ready } : m,
+    );
+
+    const full = members.length >= lobby.requiredPlayers;
+    const allReady = full && members.every((m) => m.ready);
+    let next: QuestLobby = {
+      ...lobby,
+      members,
+      status: full ? "forming" : "open",
+      updatedAt: nowIso(),
+    };
+
+    if (allReady) {
+      const assignments: Record<string, number> = {};
+      members.forEach((m, i) => {
+        assignments[m.token] = i;
+      });
+      next = {
+        ...next,
+        status: "running",
+        assignments,
+        scans: Array.from({ length: lobby.requiredPlayers }, () => false),
+        startedAt: nowIso(),
+        members: members.map((m, i) => ({ ...m, slot: i })),
+      };
+    }
+
+    tx.set(ref, next, { merge: true });
+    return { ok: true as const, lobby: next };
+  });
+}
+
+export async function startLobbyWindow(lobbyId: string, token: string, seconds = 10) {
+  const ref = db().collection("questLobbies").doc(lobbyId);
+  return db().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return { ok: false as const, error: "Lobyn finns inte", status: 404 as const };
+    const lobby = mapLobby(snap.id, (snap.data() || {}) as Record<string, unknown>);
+    if (lobby.status !== "running") {
+      return { ok: false as const, error: "Uppdraget har inte startat", status: 409 as const };
+    }
+    if (!lobby.members.some((m) => m.token === token)) {
+      return { ok: false as const, error: "Du är inte i den här lobbyn", status: 403 as const };
+    }
+    const ends = lobby.windowEndsAt ? new Date(lobby.windowEndsAt).getTime() : 0;
+    if (ends > Date.now()) return { ok: true as const, lobby };
+    const windowEndsAt = new Date(Date.now() + Math.max(5, seconds) * 1000).toISOString();
+    const scans = Array.from({ length: lobby.requiredPlayers }, () => false);
+    const next = { ...lobby, scans, windowEndsAt, updatedAt: nowIso() };
+    tx.set(ref, next, { merge: true });
+    return { ok: true as const, lobby: next };
+  });
+}
+
+export async function recordLobbyScan(lobbyId: string, token: string, slot: number) {
+  const ref = db().collection("questLobbies").doc(lobbyId);
+  return db().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return { ok: false as const, error: "Lobyn finns inte", status: 404 as const };
+    const lobby = mapLobby(snap.id, (snap.data() || {}) as Record<string, unknown>);
+    if (lobby.status !== "running") {
+      return { ok: false as const, error: "Uppdraget har inte startat", status: 409 as const };
+    }
+    const ends = lobby.windowEndsAt ? new Date(lobby.windowEndsAt).getTime() : 0;
+    if (!ends || Date.now() > ends) {
+      return {
+        ok: false as const,
+        error: "Tidsfönstret är stängt. Starta om tillsammans.",
+        status: 409 as const,
+      };
+    }
+    const mySlot = lobby.assignments[token];
+    if (mySlot === undefined) {
+      return { ok: false as const, error: "Du är inte i den här lobbyn", status: 403 as const };
+    }
+    if (slot !== mySlot) {
+      return { ok: false as const, error: "Det är inte din nod", status: 403 as const };
+    }
+    const scans = Array.from({ length: lobby.requiredPlayers }, (_, i) =>
+      Boolean(lobby.scans?.[i]),
+    );
+    scans[slot] = true;
+    const next = { ...lobby, scans, updatedAt: nowIso() };
+    tx.set(ref, next, { merge: true });
+    return { ok: true as const, lobby: next, complete: scans.every(Boolean) };
+  });
+}
+
+export async function leaveLobby(lobbyId: string, token: string) {
+  const ref = db().collection("questLobbies").doc(lobbyId);
+  return db().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return { ok: true as const, lobby: null };
+    const lobby = mapLobby(snap.id, (snap.data() || {}) as Record<string, unknown>);
+    if (lobby.status === "running") {
+      return { ok: false as const, error: "Kan inte lämna efter start", status: 409 as const };
+    }
+    const wasOnlyPending =
+      lobby.pending.some((p) => p.token === token) &&
+      !lobby.members.some((m) => m.token === token);
+    if (wasOnlyPending) {
+      const next = {
+        ...lobby,
+        pending: lobby.pending.filter((p) => p.token !== token),
+        updatedAt: nowIso(),
+      };
+      tx.set(ref, next, { merge: true });
+      return { ok: true as const, lobby: null };
+    }
+    const members = lobby.members.filter((m) => m.token !== token);
+    const pending = lobby.pending.filter((p) => p.token !== token);
+    if (members.length === 0) {
+      tx.set(
+        ref,
+        { status: "closed", members: [], pending: [], updatedAt: nowIso() },
+        { merge: true },
+      );
+      return { ok: true as const, lobby: null };
+    }
+    const hostToken = lobby.hostToken === token ? members[0].token : lobby.hostToken;
+    const hostName = lobby.hostToken === token ? members[0].name : lobby.hostName;
+    const next: QuestLobby = {
+      ...lobby,
+      members: members.map((m, i) => ({ ...m, slot: i, ready: false })),
+      pending,
+      hostToken,
+      hostName,
+      status: "open",
+      updatedAt: nowIso(),
+    };
+    tx.set(ref, next, { merge: true });
+    return { ok: true as const, lobby: next };
+  });
 }

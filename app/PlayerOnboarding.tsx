@@ -148,7 +148,7 @@ export default function PlayerOnboarding() {
             <h2>Välkommen till spelet</h2>
             <p>
               Alla spelar i samma community. Samla Chip, uppgradera kärnan tillsammans – och bara
-              en kan toppa Chip-listan.
+              en kan toppa Chip-toppen.
             </p>
             <div className="account-options">
               <button

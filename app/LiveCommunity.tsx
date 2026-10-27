@@ -69,7 +69,7 @@ export default function LiveCommunity() {
         <div className="live-title">
           <span className="pulse-dot" />
           <div>
-            <small>COMMUNITY UNLOCK · ALLA HJÄLPS ÅT</small>
+            <small>COMMUNITY-UPPLÅSNING · ALLA HJÄLPS ÅT</small>
             <h2>Kärnnivå {c.level}</h2>
           </div>
           <strong>
@@ -78,22 +78,22 @@ export default function LiveCommunity() {
           </strong>
         </div>
         <p>
-          Varje skanning och varje Chip uppgraderar Parkaden-kärnan. Tillsammans höjer ni
-          kärnnivån — en tar Chip-toppen. Boss och andra mål låses via skanningar eller
-          communityns totala Chip.
+          Skanningar och Chip uppgraderar Parkaden-kärnan tillsammans. Nya uppdrag låses upp när
+          communityn når nästa nivå. Bossen öppnas via community-Chip, inte en fast klocktid. En
+          spelare tar Chip-toppen.
         </p>
         <div className="community-stats">
           <span>
-            <b>{c.contributors}</b> bidrar
+            <b>{c.contributors}</b> spelare
           </span>
           <span>
-            <b>{c.nodes}</b> noder hittade
+            <b>{c.nodes}</b> NFC-noder
           </span>
           <span>
             <b>{(c.totalXp || 0).toLocaleString("sv-SE")}</b> Chip totalt
           </span>
           <span>
-            <b>{c.unlocks.filter((u) => u.unlocked).length}</b> quests upplåsta
+            <b>{c.unlocks.filter((u) => u.unlocked).length}</b> uppdrag upplåsta
           </span>
         </div>
         <div className="community-track">
@@ -128,7 +128,7 @@ export default function LiveCommunity() {
       <div className="scoreboard-card">
         <div className="score-head">
           <div>
-            <small>LIVE SCOREBOARD</small>
+            <small>CHIP-TOPPEN LIVE</small>
             <h2>Chip-toppen</h2>
           </div>
           <button onClick={() => setOpen((v) => !v)}>{open ? "VISA TOPP 5" : "VISA ALLA"}</button>
@@ -139,7 +139,6 @@ export default function LiveCommunity() {
               <b>{i + 1}</b>
               <span>
                 <strong>{p.name}</strong>
-                <small>Community</small>
               </span>
               <em>{p.xp.toLocaleString("sv-SE")} Chip</em>
             </li>

@@ -64,7 +64,10 @@ export async function POST(request: Request) {
       skipPuzzleCheck: Boolean(b.skipPuzzleCheck),
     });
     if (!result.ok) {
-      return Response.json({ error: result.error }, { status: result.status });
+      return Response.json(
+        { error: result.error, stepId: "stepId" in result ? result.stepId : undefined },
+        { status: result.status },
+      );
     }
 
     return Response.json({

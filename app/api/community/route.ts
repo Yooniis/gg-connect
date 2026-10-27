@@ -3,6 +3,7 @@ import {
   getGameSettings,
   recordNfcScan,
   sessionFromRequest,
+  verifyStationAccess,
 } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,9 @@ export async function POST(request: Request) {
     String((input as { stationKey?: string }).stationKey || "simulator")
       .trim()
       .slice(0, 80) || "simulator";
+  const accessCode = String((input as { accessCode?: string; k?: string }).accessCode ||
+    (input as { k?: string }).k ||
+    "");
 
   const settings = await getGameSettings();
   const isSim = station === "simulator" || station.startsWith("sim-");
@@ -39,6 +43,13 @@ export async function POST(request: Request) {
       { error: "NFC-simulering är avstängd av admin." },
       { status: 403 },
     );
+  }
+
+  if (!isSim) {
+    const gate = await verifyStationAccess(station, accessCode);
+    if (!gate.ok) {
+      return Response.json({ error: gate.error }, { status: gate.status });
+    }
   }
 
   const result = await recordNfcScan({

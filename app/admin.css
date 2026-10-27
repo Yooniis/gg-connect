@@ -268,6 +268,85 @@
   display: grid;
   gap: 10px;
 }
+.nfc-howto {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.nfc-howto input {
+  width: 100%;
+  background: #0b0a0e;
+  border: 1px solid var(--line);
+  color: #fff;
+  padding: 10px;
+}
+.nfc-program-list {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.nfc-program-card {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+.nfc-program-card h3 {
+  margin: 6px 0 4px;
+}
+.nfc-field {
+  display: grid;
+  gap: 6px;
+}
+.nfc-field label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  font-weight: 900;
+}
+.nfc-code-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.nfc-code-row strong {
+  font-size: 28px;
+  letter-spacing: 0.2em;
+  color: var(--brand-red-soft);
+}
+.nfc-url {
+  display: block;
+  word-break: break-all;
+  background: #0b0a0e;
+  border: 1px solid var(--line);
+  padding: 10px;
+  font-size: 12px;
+  color: #d7dde8;
+}
+.nfc-sticker-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+@media print {
+  .admin-top,
+  .admin-form-wrap,
+  .admin-tabs,
+  .admin-toggle,
+  .admin-inline-form,
+  .nfc-howto button,
+  .nfc-program-card button,
+  .admin-nfc-panel > .primary {
+    display: none !important;
+  }
+  .admin-grid-wide {
+    display: block;
+  }
+  .nfc-program-card {
+    break-inside: avoid;
+  }
+}
 @media (max-width: 850px) {
   .admin-grid,
   .admin-grid-wide {

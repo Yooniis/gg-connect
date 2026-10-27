@@ -115,18 +115,32 @@ export default function ProjectorLive() {
     const second = board[1];
     const gap = leader && second ? leader.xp - second.xp : 0;
     const recent = data?.activities?.[0];
+    let recentLine = "Jakten på Chip-toppen har börjat!";
+    if (recent) {
+      const xpBit =
+        recent.xp > 0
+          ? ` · +${recent.xp} Chip`
+          : recent.xp < 0
+            ? ` · ${recent.xp} Chip`
+            : "";
+      recentLine =
+        recent.kind === "unlock"
+          ? `${recent.message}${xpBit}`
+          : `${recent.playerName} ${recent.message}${xpBit}`;
+    }
+    const leadLine = !leader
+      ? "Vem tar ledningen?"
+      : gap > 0
+        ? `${leader.name} leder med ${gap.toLocaleString("sv-SE")} Chip före tvåan`
+        : `${leader.name} toppar Chip-toppen`;
     return [
-      recent
-        ? `${recent.playerName} ${recent.message}${recent.xp ? ` · +${recent.xp} Chip` : ""}`
-        : "Jakten på Chip-toppen har börjat!",
-      leader
-        ? `${leader.name} leder med ${gap.toLocaleString("sv-SE")} Chip`
-        : "Vem tar ledningen?",
+      recentLine,
+      leadLine,
       next
         ? `${Math.max(0, next.at - current).toLocaleString("sv-SE")} ${unit} kvar tills ${next.title} låses upp`
         : "Alla community-utmaningar är upplåsta!",
       board[2] ? `${board[2].name} jagar pallplatsen!` : "Vem tar tredjeplatsen?",
-      `${(totalXp || 0).toLocaleString("sv-SE")} Chip i communityn · ${community?.contributors || 0} spelare · ${community?.nodes || 0} noder`,
+      `${(totalXp || 0).toLocaleString("sv-SE")} Chip i communityn · ${community?.contributors || 0} spelare · ${community?.scans || 0} skanningar · ${community?.nodes || 0} NFC-noder`,
     ];
   }, [board, current, next, data, community, unit, totalXp]);
 
@@ -136,8 +150,8 @@ export default function ProjectorLive() {
       {questUnlock && (
         <div className="quest-unlock-banner">
           <div className="unlock-flash" />
-          <small>COMMUNITY SIGNAL</small>
-          <h1>Ny Quest upplåst</h1>
+          <small>COMMUNITY-SIGNAL</small>
+          <h1>Nytt uppdrag upplåst</h1>
           <h2>{questUnlock}</h2>
           <p>Alla spelare kan nu anta uppdraget</p>
         </div>
@@ -152,13 +166,13 @@ export default function ProjectorLive() {
           </div>
           <small>
             {burst.kind === "unlock"
-              ? "COMMUNITY UNLOCK"
+              ? "COMMUNITY-UPPLÅSNING"
               : burst.kind === "quest"
                 ? "UPPDRAG SLUTFÖRT"
                 : "NY NFC-SKANNING"}
           </small>
           <h1>{burst.kind === "unlock" ? "UPPLÅST!" : `+${burst.xp} Chip`}</h1>
-          <h2>{burst.playerName}</h2>
+          <h2>{burst.kind === "unlock" ? "HELA COMMUNITYN" : burst.playerName}</h2>
           <p>{burst.message}</p>
         </div>
       )}
@@ -166,7 +180,7 @@ export default function ProjectorLive() {
         <a href="/admin" className="projector-brand">
           <img src="/gg-logo.png" alt="Good Game" />
           <span>
-            PARKADEN <b>LIVE</b>
+            CONNECT <b>LIVE</b>
           </span>
         </a>
         <div className="projector-status">
@@ -179,14 +193,13 @@ export default function ProjectorLive() {
       </header>
       <section className="projector-main">
         <div className="projector-score">
-          <div className="screen-label">LIVE SCOREBOARD · CHIP</div>
+          <div className="screen-label">CHIP-TOPPEN LIVE</div>
           <ol>
             {board.slice(0, 5).map((p, i) => (
               <li key={p.name} className={`rank-${i + 1}`}>
                 <b>{i + 1}</b>
                 <span>
                   <strong>{p.name}</strong>
-                  <small>Community</small>
                 </span>
                 <em>
                   {p.xp.toLocaleString("sv-SE")} <small>Chip</small>
@@ -197,7 +210,7 @@ export default function ProjectorLive() {
         </div>
         <div className="projector-community">
           <div className="screen-label">
-            COMMUNITY UNLOCK · {community?.contributors || 0} BIDRAR
+            COMMUNITY-UPPLÅSNING · {community?.contributors || 0} SPELARE
           </div>
           <div className="core-level">
             <span>KÄRNNIVÅ</span>
@@ -222,7 +235,8 @@ export default function ProjectorLive() {
             {(community?.unlocks || []).slice(-3).map((u) => (
               <span key={`${u.questId}-${u.at}`} className={u.unlocked ? "done" : ""}>
                 {u.unlocked ? "✓ " : ""}
-                {u.at.toLocaleString("sv-SE")} {u.metric === "xp" ? "CHIP" : ""} {u.title.toUpperCase()}
+                {u.at.toLocaleString("sv-SE")}{" "}
+                {u.metric === "xp" ? "CHIP" : "SKANNINGAR"} {u.title.toUpperCase()}
               </span>
             ))}
           </div>

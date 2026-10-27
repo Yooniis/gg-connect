@@ -1,0 +1,141 @@
+.quest-lobby-modal {
+  width: min(520px, 100%);
+  max-height: 92vh;
+  overflow: auto;
+  background: #10131a;
+  border: 1px solid #343846;
+  border-top: 3px solid var(--brand-red);
+  padding: 34px;
+  position: relative;
+  text-align: left;
+  box-shadow: 0 30px 100px #000;
+}
+.quest-lobby-modal h2 {
+  font-size: 32px;
+  margin: 0 0 10px;
+}
+.lobby-lead {
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 0 0 22px;
+}
+.lobby-section {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #2a2f3b;
+}
+.lobby-section h3,
+.lobby-invite h4 {
+  margin: 0 0 12px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #c5cad6;
+}
+.lobby-empty,
+.lobby-wait-note {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+.lobby-pick-list,
+.lobby-open-list,
+.lobby-members {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+  display: grid;
+  gap: 8px;
+}
+.lobby-pick-list button,
+.lobby-open-list li,
+.lobby-members li {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: #0b0d12;
+  border: 1px solid #343846;
+  color: #fff;
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
+}
+.lobby-pick-list button.picked {
+  border-color: var(--brand-red);
+  box-shadow: inset 0 0 0 1px var(--brand-red);
+}
+.lobby-invite .lobby-pick-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: default;
+}
+.lobby-invite .lobby-pick-list li > button:first-child {
+  width: 100%;
+}
+.lobby-pick-list em,
+.lobby-members em {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: var(--brand-yellow);
+}
+.lobby-members li.ready {
+  border-color: var(--lime);
+}
+.lobby-members li.ready em {
+  color: var(--lime);
+}
+.lobby-members li.empty {
+  opacity: 0.45;
+  cursor: default;
+}
+.lobby-open-list li {
+  cursor: default;
+}
+.lobby-open-list small {
+  display: block;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.lobby-open-list .ghost {
+  flex-shrink: 0;
+}
+.strike-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: 8px 0;
+}
+.strike-row i {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #3a3f4d;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  color: transparent;
+  font-size: 14px;
+  font-weight: 900;
+}
+.strike-row i.hit {
+  border-color: var(--brand-red);
+  color: var(--brand-red);
+  background: color-mix(in srgb, var(--brand-red) 12%, transparent);
+}
+.sync-nodes .locked-node {
+  opacity: 0.35;
+}
+@media (max-width: 420px) {
+  .quest-lobby-modal {
+    padding: 28px 20px;
+  }
+}

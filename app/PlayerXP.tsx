@@ -43,7 +43,7 @@ export default function PlayerXP() {
       onClick={() => window.dispatchEvent(new Event("open-player-profile"))}
     >
       <div className="level-ring">
-        <span>LVL</span>
+        <span>NIVÅ</span>
         <b>{String(level).padStart(2, "0")}</b>
       </div>
       <div>

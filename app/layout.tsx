@@ -10,16 +10,18 @@ import "./live-quests.css";
 import "./community.css";
 import "./live-screen.css";
 import "./finishing.css";
+import "./silence.css";
+import "./lobby.css";
 
 /** Prevent CDN/App Hosting from serving stale prerendered HTML for a year. */
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: "Good Game: Parkaden Quest",
+  title: "Good Game Connect",
   description: "Ett NFC-baserat livespel under Good Game LAN i Parkaden, Härnösand.",
   openGraph: {
-    title: "Good Game: Parkaden Quest",
+    title: "Good Game Connect",
     description: "Hitta signaler. Hjälp communityn. Lös NFC-uppdragen.",
     images: [{ url: "/gg-logo.png" }],
   },
