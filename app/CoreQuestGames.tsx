@@ -7,9 +7,8 @@ import type { QuestLobby as Lobby } from "@/lib/types";
 
 type Props = {
   questId: number;
-  simulateNfc?: boolean;
   onClose: () => void;
-  onComplete: () => void;
+  onComplete: () => void | Promise<{ error?: string } | void>;
 };
 
 const titles: Record<number, string> = {
@@ -28,7 +27,6 @@ const routes: Record<number, string> = {
 
 export default function CoreQuestGames({
   questId,
-  simulateNfc = true,
   onClose,
   onComplete,
 }: Props) {
@@ -49,7 +47,7 @@ export default function CoreQuestGames({
   const [syncNote, setSyncNote] = useState("");
 
   useEffect(() => {
-    if (simulateNfc || (questId !== 1 && questId !== 3 && questId !== 4)) return;
+    if (questId !== 1 && questId !== 3 && questId !== 4) return;
     const load = () => {
       fetch(`/api/quest-progress?questId=${questId}`, { cache: "no-store" })
         .then((r) => r.json())
@@ -62,26 +60,44 @@ export default function CoreQuestGames({
     load();
     const t = setInterval(load, 2000);
     return () => clearInterval(t);
-  }, [questId, simulateNfc]);
+  }, [questId]);
 
   useEffect(() => {
-    if (simulateNfc || questId !== 1 || stage !== 1) return;
+    if (questId !== 1 || stage !== 1) return;
     if (scannedTags.includes("tag-010")) setStage(2);
-  }, [simulateNfc, questId, stage, scannedTags]);
+  }, [questId, stage, scannedTags]);
 
   useEffect(() => {
-    if (simulateNfc || questId !== 3 || stage !== 0) return;
+    if (questId !== 3 || stage !== 0) return;
     if (scannedTags.includes("tag-009")) setStage(1);
-  }, [simulateNfc, questId, stage, scannedTags]);
+  }, [questId, stage, scannedTags]);
 
   useEffect(() => {
-    if (simulateNfc || questId !== 4) return;
+    if (questId !== 4) return;
     setCells(BOSS_CELLS.map((id) => scannedTags.includes(id)));
-  }, [simulateNfc, questId, scannedTags]);
+  }, [questId, scannedTags]);
 
   const finishedRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
+
+  const completeMission = async () => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    try {
+      const data = await onCompleteRef.current();
+      if (data && data.error) {
+        finishedRef.current = false;
+        setDone(false);
+        setSyncNote(data.error);
+        return;
+      }
+      setDone(true);
+    } catch {
+      finishedRef.current = false;
+      setSyncNote("Kunde inte registrera uppdraget.");
+    }
+  };
 
   useEffect(() => {
     if (questId !== 2 || !windowEndsAt || done) return;
@@ -102,9 +118,7 @@ export default function CoreQuestGames({
       if (shared.length) {
         setScans([Boolean(shared[0]), Boolean(shared[1]), Boolean(shared[2])]);
         if (shared.every(Boolean) && !finishedRef.current) {
-          finishedRef.current = true;
-          setDone(true);
-          onCompleteRef.current();
+          void completeMission();
         }
       }
       if (ends) {
@@ -142,12 +156,6 @@ export default function CoreQuestGames({
     }
   };
 
-  const finish = () => {
-    if (finishedRef.current) return;
-    finishedRef.current = true;
-    setDone(true);
-    onComplete();
-  };
   const scanNode = async (i: number) => {
     if (count <= 0 || i !== mySlot || scanBusy || !lobbyId) return;
     setScanBusy(true);
@@ -166,7 +174,7 @@ export default function CoreQuestGames({
       if (d.lobby?.scans) {
         const shared = d.lobby.scans as boolean[];
         setScans([Boolean(shared[0]), Boolean(shared[1]), Boolean(shared[2])]);
-        if (d.complete) finish();
+        if (d.complete) void completeMission();
       }
     } finally {
       setScanBusy(false);
@@ -251,21 +259,11 @@ export default function CoreQuestGames({
                     <h3>Skanna den vandrande noden</h3>
                     <p>
                       Håll mobilen mot NFC-taggen på ledarens nyckelband. Taggen kan lämnas vidare
-                      efter din skanning.
+                      efter din skanning. Steget går vidare när signalen är registrerad.
                     </p>
-                    {simulateNfc ? (
-                      <button className="primary full" onClick={() => setStage(2)}>
-                        ⌁ SIMULERA LEDARTAGG
-                      </button>
-                    ) : (
-                      <p className="objective">
-                        <b>NFC KRÄVS</b>
-                        <span>
-                          Håll mobilen mot taggen på ledarens nyckelband. Steget låses upp när
-                          skanningen är registrerad.
-                        </span>
-                      </p>
-                    )}
+                    <a className="ghost full" href="/scan" style={{ textDecoration: "none" }}>
+                      INGEN NFC? ANGE STATIONSKOD
+                    </a>
                   </>
                 )}
                 {stage === 2 && (
@@ -277,7 +275,7 @@ export default function CoreQuestGames({
                     <p>Varje tal motsvarar en bokstav i alfabetet. Vilket ord bildas?</p>
                     <div className="answer-grid">
                       {["PORT", "PARK", "KODX", "LANK"].map((a) => (
-                        <button key={a} onClick={() => (a === "PARK" ? finish() : setWrong(true))}>
+                        <button key={a} onClick={() => (a === "PARK" ? void completeMission() : setWrong(true))}>
                           {a}
                         </button>
                       ))}
@@ -357,20 +355,10 @@ export default function CoreQuestGames({
                       <i />
                       <i />
                     </div>
-                    <p>Symbolen ovan finns gömd nära entrén. Hitta motsvarande NFC-bricka.</p>
-                    {simulateNfc ? (
-                      <button className="primary full" onClick={() => setStage(1)}>
-                        ⌁ JAG HAR HITTAT BRICKAN
-                      </button>
-                    ) : (
-                      <p className="objective">
-                        <b>NFC KRÄVS</b>
-                        <span>
-                          Skanna pixelsymbolens bricka vid entrén. Gåtan öppnas när signalen är
-                          registrerad.
-                        </span>
-                      </p>
-                    )}
+                    <p>Symbolen ovan finns gömd nära entrén. Hitta motsvarande NFC-bricka. Gåtan öppnas när den är skannad.</p>
+                    <a className="ghost full" href="/scan" style={{ textDecoration: "none" }}>
+                      INGEN NFC? ANGE STATIONSKOD
+                    </a>
                   </>
                 )}
                 {stage === 1 && (
@@ -379,7 +367,7 @@ export default function CoreQuestGames({
                     <p>Följ endast rutor som delar kant – aldrig hörn.</p>
                     <div className="path-options">
                       <button onClick={() => setWrong(true)}>A · ↘ ↘ →</button>
-                      <button onClick={finish}>B · → ↓ →</button>
+                      <button onClick={() => void completeMission()}>B · → ↓ →</button>
                       <button onClick={() => setWrong(true)}>C · ↓ ↗ ↓</button>
                     </div>
                     {wrong && (
@@ -396,25 +384,15 @@ export default function CoreQuestGames({
               <div className="core-body">
                 <div className="raid-status">
                   <span>LIVE EVENT</span>
-                  <b>18/20 spelare anslutna</b>
+                  <b>Tre celler i Skeppet</b>
                 </div>
-                <p>Tre energiceller måste aktiveras innan laget kan kombinera slutkoden.</p>
+                <p>Tre energiceller måste aktiveras innan laget kan kombinera slutkoden. Håll mobilen mot varje bricka.</p>
                 <div className="energy-cells">
                   {cells.map((c, i) => (
-                    <button
-                      key={i}
-                      className={c ? "on" : ""}
-                      disabled={!simulateNfc}
-                      onClick={() => {
-                        if (!simulateNfc) return;
-                        setCells(cells.map((v, n) => (n === i ? true : v)));
-                      }}
-                    >
+                    <button key={i} type="button" className={c ? "on" : ""} disabled>
                       <span>{c ? "⚡" : "○"}</span>
                       <b>CELL {i + 1}</b>
-                      <small>
-                        {c ? "AKTIVERAD" : simulateNfc ? "TRYCK FÖR NFC" : "SKANNA BRICKAN"}
-                      </small>
+                      <small>{c ? "AKTIVERAD" : "SKANNA BRICKAN"}</small>
                     </button>
                   ))}
                 </div>
@@ -427,7 +405,7 @@ export default function CoreQuestGames({
                     <p>Välj rätt slutkod för att återställa Parkadens nätverk.</p>
                     <div className="answer-grid">
                       <button onClick={() => setWrong(true)}>G7G</button>
-                      <button onClick={finish}>GG7</button>
+                      <button onClick={() => void completeMission()}>GG7</button>
                       <button onClick={() => setWrong(true)}>7GG</button>
                     </div>
                     {wrong && (
@@ -439,6 +417,7 @@ export default function CoreQuestGames({
                 )}
               </div>
             )}
+            {syncNote && questId !== 2 && <p className="error-note">{syncNote}</p>}
           </>
         )}
       </section>

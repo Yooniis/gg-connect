@@ -20,7 +20,17 @@ export default function PlayerOnboarding() {
       setPlayer(stored);
       ensurePlayer(stored)
         .then(() => window.dispatchEvent(new Event("progress-updated")))
-        .catch(() => {});
+        .catch(async () => {
+          const r = await fetch(`/api/player?token=${encodeURIComponent(stored.token)}`, {
+            cache: "no-store",
+          });
+          const data = await r.json().catch(() => null);
+          if (data?.player) return;
+          localStorage.removeItem("good-game-player");
+          setPlayer(null);
+          setMode("welcome");
+          setOpen(true);
+        });
     } else {
       setMode("welcome");
       setOpen(true);

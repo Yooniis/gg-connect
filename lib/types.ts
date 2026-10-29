@@ -18,7 +18,7 @@ export type PlayerProfile = {
 
 export type UnlockMetric = "scans" | "xp" | "none";
 
-export type PuzzleStepType = "code" | "text" | "choice";
+export type PuzzleStepType = "code" | "text" | "choice" | "time";
 
 export type PuzzleChoice = {
   id: string;
@@ -38,6 +38,14 @@ export type PuzzleStep = {
 };
 
 export type QuestGameMode = "custom" | "silence" | "builtin";
+
+export type QuestDifficulty = "LÄTT" | "MEDEL" | "SVÅR" | "EXPERT";
+
+/** Shown only after the player has scanned `tagId` for that quest. */
+export type QuestClue = {
+  tagId: string;
+  text: string;
+};
 
 export type Quest = {
   id: number;
@@ -63,8 +71,15 @@ export type Quest = {
   /** Per-quest unlock override; null = use community unlocks list or always open */
   unlockMetric?: UnlockMetric | null;
   unlockAt?: number | null;
-  /** silence = MicGate; builtin = CoreQuestGames/QuestGames; custom = puzzle runner */
+  /** silence = MicGate; builtin = CoreQuestGames; custom = puzzle runner */
   gameMode?: QuestGameMode | null;
+  difficulty?: QuestDifficulty | null;
+  /** Seconds from accept until every required scan must be in. Null = no sprint. */
+  scanWindowSeconds?: number | null;
+  /** tagIds must be scanned in listed order. Later nodes stay hidden in the client. */
+  scanInOrder?: boolean;
+  /** JSON string of QuestClue[]. Never send raw clues before the matching scan. */
+  clues?: string;
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -148,6 +163,17 @@ export const BUILTIN_QUEST_REWARDS: Record<number, { xp: number; target: number 
   13: { xp: 640, target: 900 },
   14: { xp: 400, target: 600 },
   15: { xp: 380, target: 540 },
+  16: { xp: 180, target: 360 },
+  17: { xp: 240, target: 480 },
+  18: { xp: 640, target: 240 },
+  19: { xp: 520, target: 900 },
+  20: { xp: 320, target: 600 },
+  21: { xp: 360, target: 720 },
+  22: { xp: 480, target: 900 },
+  23: { xp: 760, target: 1200 },
+  24: { xp: 340, target: 700 },
+  25: { xp: 500, target: 840 },
+  26: { xp: 820, target: 1200 },
 };
 
 const ACCESS_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -206,12 +232,45 @@ export function normalizeAnswer(value: string) {
   return value.trim().toLocaleLowerCase("sv-SE").replace(/\s+/g, " ");
 }
 
+/** Four slots shown as ??:??. Typed digits replace the question marks from the left. */
+export function clockMask(digits: string) {
+  const clean = digits.replace(/\D/g, "").slice(0, 4);
+  const slots = ["?", "?", "?", "?"];
+  for (let i = 0; i < clean.length; i++) slots[i] = clean[i];
+  return `${slots[0]}${slots[1]}:${slots[2]}${slots[3]}`;
+}
+
+export function formatClockAnswer(digits: string) {
+  const clean = digits.replace(/\D/g, "").slice(0, 4);
+  if (clean.length !== 4) return "";
+  return `${clean.slice(0, 2)}:${clean.slice(2)}`;
+}
+
+/** True when the clock entry is exactly these four digits, with or without a colon. */
+export function matchesClockDigits(value: string, digits: string) {
+  return value.replace(/\D/g, "") === digits;
+}
+
 export function parsePuzzleSteps(raw: string | PuzzleStep[] | null | undefined): PuzzleStep[] {
   if (!raw) return [];
   if (Array.isArray(raw)) return raw;
   try {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function parseClues(raw: string | QuestClue[] | null | undefined): QuestClue[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((c) => ({ tagId: String(c?.tagId || ""), text: String(c?.text || "") }))
+      .filter((c) => c.tagId && c.text);
   } catch {
     return [];
   }

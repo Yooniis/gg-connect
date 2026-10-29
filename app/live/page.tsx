@@ -177,12 +177,12 @@ export default function ProjectorLive() {
         </div>
       )}
       <header>
-        <a href="/admin" className="projector-brand">
+        <div className="projector-brand">
           <img src="/gg-logo.png" alt="Good Game" />
           <span>
             CONNECT <b>LIVE</b>
           </span>
-        </a>
+        </div>
         <div className="projector-status">
           <i /> LIVE · HÄRNÖSAND
         </div>

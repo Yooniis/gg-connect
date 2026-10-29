@@ -7,7 +7,7 @@ import AdminNfcPanel from "./nfc-panel";
 type UnlockMetric = "scans" | "xp" | "none" | "";
 type PuzzleStep = {
   id: string;
-  type: "code" | "text" | "choice";
+  type: "code" | "text" | "choice" | "time";
   prompt: string;
   answer?: string;
   choices?: { id: string; label: string; correct?: boolean }[];
@@ -124,7 +124,6 @@ export default function AdminQuestEditor() {
   const [image, setImage] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [simulateNfc, setSimulateNfc] = useState(true);
   const [unlocks, setUnlocks] = useState<UnlockRule[]>([]);
   const [tab, setTab] = useState<"quests" | "tags" | "unlocks">("quests");
   const [tagForm, setTagForm] = useState({ name: "", stationKey: "", location: "" });
@@ -146,7 +145,6 @@ export default function AdminQuestEditor() {
       if (tRes.ok) setTags((await tRes.json()).tags || []);
       if (sRes.ok) {
         const s = (await sRes.json()).settings;
-        setSimulateNfc(s.simulateNfcEnabled !== false);
         setUnlocks(s.unlocks || []);
       }
     } catch {
@@ -235,16 +233,15 @@ export default function AdminQuestEditor() {
     load();
   };
 
-  const saveSettings = async (nextSimulate: boolean, nextUnlocks: UnlockRule[]) => {
+  const saveSettings = async (nextUnlocks: UnlockRule[]) => {
     setBusy(true);
     const r = await fetch("/api/admin/settings", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ simulateNfcEnabled: nextSimulate, unlocks: nextUnlocks }),
+      body: JSON.stringify({ unlocks: nextUnlocks }),
     });
     setBusy(false);
     if (r.ok) {
-      setSimulateNfc(nextSimulate);
       setUnlocks(nextUnlocks);
       setMessage("Inställningar sparade.");
     } else setMessage("Kunde inte spara inställningar.");
@@ -308,17 +305,6 @@ export default function AdminQuestEditor() {
             </button>
           ))}
         </div>
-
-        {tab !== "tags" && (
-          <label className="admin-toggle">
-            <input
-              type="checkbox"
-              checked={simulateNfc}
-              onChange={(e) => saveSettings(e.target.checked, unlocks)}
-            />
-            <span>Tillåt simulera NFC (för test utan brickor)</span>
-          </label>
-        )}
 
         {tab === "quests" && (
           <>
@@ -458,7 +444,7 @@ export default function AdminQuestEditor() {
               >
                 LÄGG TILL MÅL
               </button>
-              <button type="button" className="primary" onClick={() => saveSettings(simulateNfc, unlocks)}>
+              <button type="button" className="primary" onClick={() => saveSettings(unlocks)}>
                 SPARA UPPLÅSNING
               </button>
             </div>
@@ -662,6 +648,7 @@ export default function AdminQuestEditor() {
                         <option value="code">Kod</option>
                         <option value="text">Fri text</option>
                         <option value="choice">Flerval</option>
+                        <option value="time">Klockslag</option>
                       </select>
                     </label>
                     <label>
@@ -686,7 +673,9 @@ export default function AdminQuestEditor() {
                       onChange={(e) => updateStep(i, { prompt: e.target.value })}
                     />
                   </label>
-                  {step.type !== "choice" ? (
+                  {step.type === "time" ? (
+                    <p>Rätt svar är 10:30.</p>
+                  ) : step.type !== "choice" ? (
                     <label>
                       Rätt svar
                       <input

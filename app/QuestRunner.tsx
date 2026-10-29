@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { awardQuest } from "./game-progress";
 import { getPlayer } from "./player-session";
+import { clockMask, formatClockAnswer } from "@/lib/types";
 
 type Tag = { id: string; name: string; stationKey: string; location: string };
 type PuzzleStep = {
   id: string;
-  type: "code" | "text" | "choice";
+  type: "code" | "text" | "choice" | "time";
   prompt: string;
   choices?: { id: string; label: string }[];
   tagId?: string | null;
@@ -20,24 +21,97 @@ type Quest = {
   requireScan?: boolean;
   tags?: Tag[];
   puzzleSteps?: PuzzleStep[];
+  scanWindowSeconds?: number | null;
+  scanInOrder?: boolean;
 };
+
+function formatLeft(seconds: number) {
+  const s = Math.max(0, Math.floor(seconds));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, "0")}`;
+}
+
+function ClockField({
+  digits,
+  onDigits,
+}: {
+  digits: string;
+  onDigits: (next: string) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const shown = clockMask(digits);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || document.activeElement !== node) return;
+    const pos = digits.length < 2 ? digits.length : digits.length + 1;
+    node.setSelectionRange(pos, pos);
+  }, [digits]);
+
+  const placeCaret = (node: HTMLInputElement) => {
+    const pos = digits.length < 2 ? digits.length : digits.length + 1;
+    node.setSelectionRange(pos, pos);
+  };
+
+  return (
+    <label className="runner-input clock-field">
+      Klockslag
+      <input
+        ref={ref}
+        className="clock-input"
+        inputMode="numeric"
+        autoComplete="off"
+        autoFocus
+        aria-label="Klockslag"
+        value={shown}
+        onFocus={(e) => placeCaret(e.currentTarget)}
+        onClick={(e) => placeCaret(e.currentTarget)}
+        onKeyDown={(e) => {
+          if (e.key === "Backspace") {
+            e.preventDefault();
+            onDigits(digits.slice(0, -1));
+            return;
+          }
+          if (/^\d$/.test(e.key)) {
+            e.preventDefault();
+            if (digits.length < 4) onDigits(digits + e.key);
+          }
+        }}
+        onChange={(e) => {
+          const raw = e.target.value;
+          const next = raw.replace(/\D/g, "").slice(0, 4);
+          if (next === digits && raw.length < shown.length) {
+            onDigits(digits.slice(0, -1));
+            return;
+          }
+          if (next !== digits) onDigits(next);
+        }}
+      />
+    </label>
+  );
+}
 
 type Props = {
   quest: Quest;
-  simulateNfcEnabled: boolean;
   onClose: () => void;
   onComplete: () => void;
 };
 
 export default function QuestRunner({
   quest,
-  simulateNfcEnabled,
   onClose,
   onComplete,
 }: Props) {
-  const required = quest.tags || [];
+  const required = (quest.tagIds?.length ? quest.tagIds : (quest.tags || []).map((t) => t.id))
+    .map((id) => (quest.tags || []).find((t) => t.id === id))
+    .filter((t): t is Tag => Boolean(t));
   const steps = quest.puzzleSteps || [];
+  const windowSeconds = quest.scanWindowSeconds || 0;
   const [scanned, setScanned] = useState<string[]>([]);
+  const [clues, setClues] = useState<{ tagId: string; text: string }[]>([]);
+  const [acceptedAt, setAcceptedAt] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const [phase, setPhase] = useState<"nfc" | "puzzle" | "confirm" | "done">(
     quest.requireScan !== false && required.length ? "nfc" : steps.length ? "puzzle" : "confirm",
   );
@@ -46,62 +120,103 @@ export default function QuestRunner({
   const [answers, setAnswers] = useState<{ stepId: string; answer: string }[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [memoryReady, setMemoryReady] = useState(quest.id !== 7);
 
   const remaining = useMemo(
     () => required.filter((t) => !scanned.includes(t.id)),
     [required, scanned],
   );
+  const visibleTags = quest.scanInOrder
+    ? required.filter((tag, index) => {
+        if (scanned.includes(tag.id)) return true;
+        const prev = required[index - 1];
+        return !prev || scanned.includes(prev.id);
+      })
+    : required;
+  const left = windowSeconds
+    ? acceptedAt
+      ? windowSeconds - Math.floor((now - new Date(acceptedAt).getTime()) / 1000)
+      : windowSeconds
+    : null;
+  const expired = left != null && left <= 0 && scanned.length < required.length;
   const current = steps[stepIndex];
+
+  const applyProgress = (data: {
+    scans?: { tagId: string }[];
+    clues?: { tagId: string; text: string }[];
+    acceptedAt?: string | null;
+  }) => {
+    const ids = (data.scans || []).map((s) => s.tagId);
+    setScanned(ids);
+    if (data.clues) setClues(data.clues);
+    if (data.acceptedAt !== undefined) setAcceptedAt(data.acceptedAt);
+    return ids;
+  };
+
+  useEffect(() => {
+    if (!windowSeconds) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, [windowSeconds]);
+
+  useEffect(() => {
+    if (quest.id !== 7 || phase !== "puzzle") return;
+    setMemoryReady(false);
+    const timer = window.setTimeout(() => setMemoryReady(true), 3500);
+    return () => window.clearTimeout(timer);
+  }, [quest.id, phase]);
 
   useEffect(() => {
     const player = getPlayer();
     if (!player) return;
-    fetch(`/api/quest-progress?questId=${quest.id}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => {
-        const ids = (d.scans || []).map((s: { tagId: string }) => s.tagId);
-        setScanned(ids);
-        if (quest.requireScan !== false && required.length && ids.length < required.length) {
-          setPhase("nfc");
-        } else if (steps.length) {
-          setPhase("puzzle");
-        } else {
-          setPhase("confirm");
-        }
-      })
-      .catch(() => {});
+    let stop = false;
+    const load = () =>
+      fetch(`/api/quest-progress?questId=${quest.id}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => {
+          if (stop) return;
+          const ids = applyProgress(d);
+          if (quest.requireScan !== false && required.length && ids.length < required.length) {
+            setPhase("nfc");
+          } else if (steps.length) {
+            setPhase((p) => (p === "done" ? p : "puzzle"));
+          } else {
+            setPhase((p) => (p === "done" ? p : "confirm"));
+          }
+        })
+        .catch(() => {});
+    load();
+    const timer = window.setInterval(load, 2000);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+    };
   }, [quest.id, quest.requireScan, required.length, steps.length]);
 
-  const simulateTag = async (tag: Tag) => {
-    if (!simulateNfcEnabled) {
-      setError("NFC-simulering är avstängd i admin.");
-      return;
-    }
+  const restartSprint = async () => {
     setBusy(true);
     setError("");
     const player = getPlayer();
-    const r = await fetch("/api/quest-progress", {
+    const r = await fetch("/api/progress", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        action: "accept",
         playerName: player?.name,
         questId: quest.id,
-        tagId: tag.id,
-        stationKey: tag.stationKey,
+        questTitle: quest.title,
       }),
     });
     const data = await r.json();
     setBusy(false);
     if (!r.ok) {
-      setError(data.error || "Kunde inte registrera skanning.");
+      setError(data.error || "Kunde inte starta om.");
       return;
     }
-    const ids = (data.scans || []).map((s: { tagId: string }) => s.tagId);
-    setScanned(ids);
-    if (ids.length >= required.length) {
-      if (steps.length) setPhase("puzzle");
-      else await finish([]);
-    }
+    setScanned([]);
+    setClues([]);
+    setAcceptedAt(data.acceptance?.acceptedAt || new Date().toISOString());
+    setPhase("nfc");
   };
 
   const submitStep = async () => {
@@ -110,9 +225,9 @@ export default function QuestRunner({
       setError("Skanna rätt NFC-tagg innan du svarar på detta steg.");
       return;
     }
-    const value = answer.trim();
+    const value = current.type === "time" ? formatClockAnswer(answer) : answer.trim();
     if (!value) {
-      setError("Ange ett svar.");
+      setError(current.type === "time" ? "Skriv fyra siffror." : "Ange ett svar.");
       return;
     }
     const nextAnswers = [
@@ -164,34 +279,56 @@ export default function QuestRunner({
             <span className="game-kicker">
               SKANNA {scanned.length}/{required.length} TAGGAR
             </span>
-            <p>Skanning krävs innan du får gå vidare. Håll mobilen mot brickan – eller simulera om det är aktiverat.</p>
+            {left != null && (
+              <p className={`sprint-clock ${expired ? "late" : ""}`} aria-live="polite">
+                {formatLeft(left)}
+              </p>
+            )}
+            <p>
+              {quest.scanInOrder
+                ? "Håll mobilen mot brickan. Nästa plats står på den du just skannade."
+                : left != null
+                  ? "Alla noder måste vara skannade innan klockan når noll. Ordningen är fri."
+                  : "Håll mobilen mot brickan. Ledtråden dyker upp här när skanningen är registrerad."}
+            </p>
+            {clues.length > 0 && (
+              <ul className="clue-list">
+                {clues.map((c) => (
+                  <li key={c.tagId}>{c.text}</li>
+                ))}
+              </ul>
+            )}
             <div className="tag-scan-list">
-              {required.map((tag) => {
+              {visibleTags.map((tag) => {
                 const ok = scanned.includes(tag.id);
                 return (
                   <div key={tag.id} className={`tag-scan-row ${ok ? "done" : ""}`}>
                     <div>
                       <b>{tag.name}</b>
                       <small>
-                        {tag.id} · {tag.location || tag.stationKey}
+                        {tag.location || tag.stationKey}
                       </small>
                     </div>
                     {ok ? (
                       <em>✓ SKANNAD</em>
                     ) : (
-                      <button
-                        className="ghost"
-                        disabled={busy || !simulateNfcEnabled}
-                        onClick={() => simulateTag(tag)}
-                      >
-                        {simulateNfcEnabled ? "⌁ SIMULERA NFC" : "NFC KRÄVS"}
-                      </button>
+                      <em>VÄNTAR</em>
                     )}
                   </div>
                 );
               })}
             </div>
-            {!remaining.length && (
+            {expired && (
+              <button className="primary full" disabled={busy} onClick={restartSprint}>
+                {busy ? "STARTAR OM…" : "STARTA OM SPRINTEN"}
+              </button>
+            )}
+            {!expired && remaining.length > 0 && (
+              <a className="ghost full" href="/scan" style={{ textDecoration: "none" }}>
+                INGEN NFC? ANGE STATIONSKOD
+              </a>
+            )}
+            {!remaining.length && !expired && (
               <button
                 className="primary full"
                 onClick={() => (steps.length ? setPhase("puzzle") : setPhase("confirm"))}
@@ -202,13 +339,34 @@ export default function QuestRunner({
           </div>
         )}
 
-        {phase === "puzzle" && current && (
+        {phase === "puzzle" && current && quest.id === 7 && !memoryReady && (
+          <div className="game-body">
+            <span className="game-kicker">MEMORERA</span>
+            <p>Sekvensen försvinner om en stund. Återskapa den sedan.</p>
+            <div className="memory-grid">
+              {["orange", "red", "yellow", "blue"].map((c) => (
+                <button key={c} type="button" className={`${c} flash`} disabled aria-label={c} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {phase === "puzzle" && current && (quest.id !== 7 || memoryReady) && (
           <div className="game-body">
             <span className="game-kicker">
               STEG {stepIndex + 1} AV {steps.length}
             </span>
             <h3>{current.prompt}</h3>
-            {current.type === "choice" ? (
+            {clues.length > 0 && (
+              <ul className="clue-list">
+                {clues.map((c) => (
+                  <li key={c.tagId}>{c.text}</li>
+                ))}
+              </ul>
+            )}
+            {current.type === "time" ? (
+              <ClockField digits={answer.replace(/\D/g, "").slice(0, 4)} onDigits={setAnswer} />
+            ) : current.type === "choice" ? (
               <div className="answer-grid">
                 {(current.choices || []).map((c) => (
                   <button

@@ -1,10 +1,16 @@
 import {
   getQuest,
   listTags,
-  playerQuestTagScans,
+  questRunState,
   recordQuestTagScan,
   sessionFromRequest,
+  verifyStationAccess,
 } from "@/lib/db";
+
+function publicTag<T extends { accessCode?: string }>(tag: T) {
+  const { accessCode: _hidden, ...rest } = tag;
+  return rest;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -13,17 +19,17 @@ export async function GET(request: Request) {
   const questId = Number(url.searchParams.get("questId"));
   const identity = await sessionFromRequest(request);
   if (!identity.name || !questId) {
-    return Response.json({ scans: [], tags: [] });
+    return Response.json({ scans: [], clues: [], tags: [] });
   }
-  const quest = await getQuest(questId);
-  const tags = await listTags();
-  const scans = await playerQuestTagScans(identity.name, questId, quest?.tagIds);
-  return Response.json({
-    scans,
-    requiredTagIds: quest?.tagIds || [],
-    requireScan: quest?.requireScan !== false,
-    tags: tags.filter((t) => (quest?.tagIds || []).includes(t.id)),
-  });
+  const [state, tags] = await Promise.all([
+    questRunState(identity.name, questId),
+    listTags(),
+  ]);
+  const ordered = state.requiredTagIds
+    .map((id) => tags.find((t) => t.id === id))
+    .filter((t) => Boolean(t))
+    .map((t) => publicTag(t!));
+  return Response.json({ ...state, tags: ordered });
 }
 
 export async function POST(request: Request) {
@@ -53,12 +59,25 @@ export async function POST(request: Request) {
     return Response.json({ error: "Taggen hör inte till detta uppdrag." }, { status: 400 });
   }
 
+  const accessCode = String(
+    (body as { accessCode?: string; k?: string }).accessCode ||
+      (body as { k?: string }).k ||
+      "",
+  );
+  const gate = await verifyStationAccess(tag.stationKey, accessCode);
+  if (!gate.ok) {
+    return Response.json({ error: gate.error }, { status: gate.status });
+  }
+
   const result = await recordQuestTagScan({
     name: identity.name,
     questId,
     tagId: tag.id,
     stationKey: tag.stationKey,
   });
+  if (!result.ok) {
+    return Response.json({ error: result.error }, { status: result.status });
+  }
 
   return Response.json(result);
 }

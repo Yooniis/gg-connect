@@ -5,7 +5,19 @@
 .tag-scan-row b{display:block}
 .tag-scan-row small{color:var(--muted);font-size:11px}
 .tag-scan-row em{font-style:normal;color:var(--brand-red-soft);font-size:11px;font-weight:900}
+.quest-flags{display:flex;gap:6px;align-items:center}
+.diff{font-size:10px;font-weight:800;letter-spacing:.08em;padding:4px 7px;border:1px solid #3a3f4c}
+.diff-easy{color:#9dcc8a}
+.diff-mid{color:#e2c56a}
+.diff-hard{color:#e08a4f}
+.diff-expert{color:#e06a6a}
+.clue-list{list-style:none;padding:0;margin:14px 0;display:grid;gap:8px;text-align:left}
+.clue-list li{padding:12px 14px;border:1px solid #353944;background:#141820;color:#e7ebf3;line-height:1.45}
+.sprint-clock{margin:8px 0 0;font-size:40px;font-weight:800;letter-spacing:.04em;font-variant-numeric:tabular-nums}
+.sprint-clock.late{color:#e06a6a}
 .runner-input{display:grid;gap:8px;text-align:left;margin:18px 0;color:var(--muted);font-size:12px;font-weight:800}
 .runner-input input{background:#0b0a0e;border:1px solid #353944;color:#fff;padding:14px;font-size:16px}
+.clock-field{text-align:center}
+.clock-input{font-family:ui-monospace,Consolas,monospace;font-size:42px!important;font-weight:800;letter-spacing:.14em;text-align:center;font-variant-numeric:tabular-nums}
 .answer-grid .selected{border-color:var(--brand-red)!important;box-shadow:0 0 0 1px var(--brand-red)}
 @media(max-width:420px){.game-modal{padding:28px 20px}.memory-grid button{height:90px}}

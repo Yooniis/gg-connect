@@ -1,6 +1,5 @@
 import {
   communitySnapshot,
-  getGameSettings,
   recordNfcScan,
   sessionFromRequest,
   verifyStationAccess,
@@ -28,28 +27,16 @@ export async function POST(request: Request) {
     0,
     Math.min(500, Number((input as { xpGain?: number }).xpGain) || 20),
   );
-  const station =
-    String((input as { stationKey?: string }).stationKey || "simulator")
-      .trim()
-      .slice(0, 80) || "simulator";
+  const station = String((input as { stationKey?: string }).stationKey || "")
+    .trim()
+    .slice(0, 80);
   const accessCode = String((input as { accessCode?: string; k?: string }).accessCode ||
     (input as { k?: string }).k ||
     "");
 
-  const settings = await getGameSettings();
-  const isSim = station === "simulator" || station.startsWith("sim-");
-  if (isSim && !settings.simulateNfcEnabled) {
-    return Response.json(
-      { error: "NFC-simulering är avstängd av admin." },
-      { status: 403 },
-    );
-  }
-
-  if (!isSim) {
-    const gate = await verifyStationAccess(station, accessCode);
-    if (!gate.ok) {
-      return Response.json({ error: gate.error }, { status: gate.status });
-    }
+  const gate = await verifyStationAccess(station, accessCode);
+  if (!gate.ok) {
+    return Response.json({ error: gate.error }, { status: gate.status });
   }
 
   const result = await recordNfcScan({

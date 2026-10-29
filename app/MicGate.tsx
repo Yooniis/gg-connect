@@ -5,7 +5,7 @@ export default function MicGate() {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState(false);
   useEffect(() => {
-    setOpen(localStorage.getItem("gg-mic-ready") !== "yes");
+    setOpen(localStorage.getItem("gg-mic-ready") == null);
   }, []);
   const enable = async () => {
     try {
@@ -30,11 +30,20 @@ export default function MicGate() {
         </p>
         {error && (
           <p className="gate-error">
-            Mikrofonåtkomst krävs för att fortsätta. Tillåt åtkomst i webbläsaren.
+            Utan mikrofon kan du inte spela Tyst kommunikation. Övriga uppdrag fungerar ändå.
           </p>
         )}
         <button className="primary full" onClick={enable}>
-          AKTIVERA & ÖPPNA SPELET
+          AKTIVERA MIKROFON
+        </button>
+        <button
+          className="ghost full"
+          onClick={() => {
+            localStorage.setItem("gg-mic-ready", "skip");
+            setOpen(false);
+          }}
+        >
+          INTE NU
         </button>
       </section>
     </div>

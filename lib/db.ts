@@ -12,6 +12,8 @@ import {
   PlayerProfile,
   PuzzleStep,
   Quest,
+  QuestClue,
+  QuestDifficulty,
   UnlockMetric,
   QuestLobby,
   QuestLobbyMember,
@@ -20,8 +22,10 @@ import {
   compositeKey,
   nameKey,
   normalizeAccessCode,
+  matchesClockDigits,
   normalizeAnswer,
   nowIso,
+  parseClues,
   parsePuzzleSteps,
   partySizeForQuest,
 } from "./types";
@@ -87,6 +91,13 @@ function questFromDoc(id: number, data: Record<string, unknown>): Quest {
     unlockMetric: (data.unlockMetric as UnlockMetric | null | undefined) ?? null,
     unlockAt: data.unlockAt == null ? null : Number(data.unlockAt),
     gameMode: (data.gameMode as Quest["gameMode"]) ?? (id === 5 ? "silence" : id <= 10 ? "builtin" : "custom"),
+    difficulty: (data.difficulty as Quest["difficulty"]) || null,
+    scanWindowSeconds:
+      data.scanWindowSeconds == null || data.scanWindowSeconds === ""
+        ? null
+        : Number(data.scanWindowSeconds),
+    scanInOrder: data.scanInOrder === true,
+    clues: String(data.clues || "[]"),
     createdBy: data.createdBy as string | undefined,
     createdAt: data.createdAt as string | undefined,
     updatedAt: data.updatedAt as string | undefined,
@@ -240,14 +251,10 @@ const QUEST_SEED_META: Record<
     puzzleSteps: [
       {
         id: "s1",
-        type: "choice",
-        prompt: "Utomhusnoden blinkar: 19:45 → ??. Vilken lokal tid ska du ange?",
+        type: "time",
+        prompt:
+          "Klockan ute visar 19:45, men den synkar inte rätt. Igår den här tiden stod den på 10:30. Vad ska den stå på nu för att gå rätt?",
         tagId: "tag-009",
-        choices: [
-          { id: "a", label: "20:00", correct: false },
-          { id: "b", label: "21:00", correct: false },
-          { id: "c", label: "19:45", correct: true },
-        ],
       },
       {
         id: "s2",
@@ -303,11 +310,280 @@ const QUEST_SEED_META: Record<
 
 const EXTRA_QUESTS = [
   ["builtin-11", "Kodspegeln", "SOLO", "Övre ståbord", 340, "En kod speglas baklänges på ståbordsnoden. Vänd den rätt.", ["Hitta övre ståbord", "Läs spegelkoden", "Ange rätt riktning"]],
-  ["builtin-12", "Tidsglitch", "SOLO", "Utomhus entré", 280, "Entrénodens klocka ljuger ibland. Läs signalen och bekräfta kvällens lösenord.", ["Skanna utomhusnoden", "Tolka tidssignalen", "Ange lösenordet"]],
+  ["builtin-12", "Tidsglitch", "SOLO", "Utomhus entré", 280, "Uteklockan synkar inte rätt. Räkna ut vad den ska stå på och bekräfta kvällens lösenord.", ["Skanna utomhusnoden", "Räkna ut rätt tid", "Ange lösenordet"]],
   ["builtin-13", "Nodväxeln", "LAG", "Tre zoner", 640, "Tre spelare aktiverar kapphängning, TV-spel och scen i samma runda och knäcker platsbokstäverna.", ["Dela upp er på tre noder", "Skanna alla tre", "Skriv ihop bokstavskoden"]],
   ["builtin-14", "Kärnprovet", "SOLO", "Soffgrupp nedre", 400, "Ett kunskapstest om hur communityn faktiskt laddar kärnan.", ["Skanna soffgruppen", "Svara rätt på kärnfrågan"]],
   ["builtin-15", "Pixelchiffer", "SOLO", "Fejkad eldstad", 380, "Översätt pixelvägen till siffror som på en knappsats.", ["Skanna eldstaden", "Tolka pixelvägen", "Ange tresiffrig kod"]],
 ] as const;
+
+type SeededQuest = {
+  id: number;
+  sourceKey: string;
+  title: string;
+  type: string;
+  place: string;
+  xp: number;
+  difficulty: QuestDifficulty;
+  description: string;
+  steps: string[];
+  tagIds: string[];
+  puzzleSteps: PuzzleStep[];
+  clues: QuestClue[];
+  scanWindowSeconds?: number;
+  scanInOrder?: boolean;
+};
+
+const MORE_QUESTS: SeededQuest[] = [
+  {
+    id: 16,
+    sourceKey: "builtin-16",
+    title: "Färgsignalen",
+    type: "SOLO",
+    place: "TV-hörnan",
+    xp: 180,
+    difficulty: "LÄTT",
+    description: "En enda nod viskar en färg. Skanna den och skriv vad du hörde.",
+    steps: ["Hitta TV-hörnan i Skeppet", "Skanna noden och läs ledtråden", "Skriv färgen"],
+    tagIds: ["tag-006"],
+    puzzleSteps: [{ id: "s1", type: "text", prompt: "Vilken färg angav noden?", answer: "röd", tagId: "tag-006" }],
+    clues: [{ tagId: "tag-006", text: "Kvällens färg är röd." }],
+  },
+  {
+    id: 17,
+    sourceKey: "builtin-17",
+    title: "Två halvor",
+    type: "SOLO",
+    place: "Soffgrupp och övre ståbord",
+    xp: 240,
+    difficulty: "LÄTT",
+    description: "Lösenordet är delat på två noder. Ingen av dem räcker ensam.",
+    steps: ["Skanna soffgruppen i nedre foajén", "Skanna övre ståbord", "Sätt ihop orden"],
+    tagIds: ["tag-002", "tag-004"],
+    puzzleSteps: [{ id: "s1", type: "text", prompt: "Skriv ihop de två orden utan mellanslag.", answer: "nattkod" }],
+    clues: [
+      { tagId: "tag-002", text: "Första ordet: NATT" },
+      { tagId: "tag-004", text: "Andra ordet: KOD" },
+    ],
+  },
+  {
+    id: 18,
+    sourceKey: "builtin-18",
+    title: "Sprintrundan",
+    type: "SOLO",
+    place: "Entré → scen",
+    xp: 640,
+    difficulty: "SVÅR",
+    description:
+      "Klockan startar när du antar. Skanna fem noder inom 4 minuter: utomhusentrén, kapphängningen, eldstaden, TV-spelen och scenen. Ordningen är fri.",
+    steps: [
+      "Anta uppdraget så klockan startar",
+      "Spring mellan de fem noderna",
+      "Sista skanningen måste hinna inom 4 minuter",
+    ],
+    tagIds: ["tag-009", "tag-001", "tag-003", "tag-005", "tag-008"],
+    puzzleSteps: [],
+    clues: [],
+    scanWindowSeconds: 240,
+  },
+  {
+    id: 19,
+    sourceKey: "builtin-19",
+    title: "Fragmentkoden",
+    type: "SOLO",
+    place: "Fyra zoner",
+    xp: 520,
+    difficulty: "SVÅR",
+    description: "Ordet är sönderdelat. Varje nod ger ett fragment, och du behöver alla fyra innan koden går ihop.",
+    steps: ["Skanna soffgruppen", "Skanna ståbordet", "Skanna TV-hörnan och sällskapsspelen", "Lägg fragmenten i den ordningen"],
+    tagIds: ["tag-002", "tag-004", "tag-006", "tag-007"],
+    puzzleSteps: [
+      {
+        id: "s1",
+        type: "text",
+        prompt: "Lägg fragmenten i ordningen soffgrupp, ståbord, TV-hörna, sällskapsspel. Skriv ordet utan mellanslag.",
+        answer: "glitchen",
+      },
+    ],
+    clues: [
+      { tagId: "tag-002", text: "Fragment: GLI" },
+      { tagId: "tag-004", text: "Fragment: TC" },
+      { tagId: "tag-006", text: "Fragment: HE" },
+      { tagId: "tag-007", text: "Fragment: N" },
+    ],
+  },
+  {
+    id: 20,
+    sourceKey: "builtin-20",
+    title: "Nodräkningen",
+    type: "SOLO",
+    place: "Entré, soffor och scen",
+    xp: 320,
+    difficulty: "MEDEL",
+    description: "Tre noder ger en ekvation. Du måste läsa alla innan talet går att räkna ut.",
+    steps: ["Skanna utomhusentrén", "Skanna soffgruppen", "Skanna scenen", "Räkna ut talet"],
+    tagIds: ["tag-009", "tag-002", "tag-008"],
+    puzzleSteps: [{ id: "s1", type: "code", prompt: "Vilket tal beskriver noderna?", answer: "11" }],
+    clues: [
+      { tagId: "tag-009", text: "A = 4" },
+      { tagId: "tag-002", text: "B = A + 3" },
+      { tagId: "tag-008", text: "Koden är A + B" },
+    ],
+  },
+  {
+    id: 21,
+    sourceKey: "builtin-21",
+    title: "Baklängesbudet",
+    type: "SOLO",
+    place: "Eldstad, kapphängning, TV-spel",
+    xp: 360,
+    difficulty: "MEDEL",
+    description: "Tre fragment ska sättas ihop i en bestämd ordning. Sedan står hela ordet baklänges.",
+    steps: ["Samla fragmenten på tre noder", "Lägg dem i ordningen eldstad, kapphängning, TV-spel", "Vänd hela raden rätt"],
+    tagIds: ["tag-003", "tag-001", "tag-005"],
+    puzzleSteps: [
+      {
+        id: "s1",
+        type: "text",
+        prompt: "Sätt ihop fragmenten i ordningen eldstad, kapphängning, TV-spel. Vänd sedan hela raden rätt.",
+        answer: "connect",
+      },
+    ],
+    clues: [
+      { tagId: "tag-003", text: "Fragment: TC" },
+      { tagId: "tag-001", text: "Fragment: ENN" },
+      { tagId: "tag-005", text: "Fragment: OC" },
+    ],
+  },
+  {
+    id: 22,
+    sourceKey: "builtin-22",
+    title: "Lögnnoden",
+    type: "SOLO",
+    place: "Kapphängning, eldstad, scen",
+    xp: 480,
+    difficulty: "SVÅR",
+    description: "Tre noder uttalar sig om varandra. Exakt en ljuger. Du måste höra alla tre.",
+    steps: ["Skanna kapphängningen", "Skanna eldstaden", "Skanna scenen", "Peka ut lögnaren"],
+    tagIds: ["tag-001", "tag-003", "tag-008"],
+    puzzleSteps: [
+      {
+        id: "s1",
+        type: "choice",
+        prompt: "Exakt en nod ljuger. Vilken?",
+        choices: [
+          { id: "a", label: "Kapphängningen", correct: true },
+          { id: "b", label: "Eldstaden", correct: false },
+          { id: "c", label: "Scenen", correct: false },
+        ],
+      },
+    ],
+    clues: [
+      { tagId: "tag-001", text: "Kapphängningen säger: Eldstaden ljuger." },
+      { tagId: "tag-003", text: "Eldstaden säger: Scenen talar sanning." },
+      { tagId: "tag-008", text: "Scenen säger: Kapphängningen ljuger." },
+    ],
+  },
+  {
+    id: 23,
+    sourceKey: "builtin-23",
+    title: "Varannan bokstav",
+    type: "SOLO",
+    place: "Eldstad, kapphängning, gradäng",
+    xp: 760,
+    difficulty: "EXPERT",
+    description: "En nod ger ett ord. De andra ger reglerna. Utan alla tre blir svaret fel.",
+    steps: ["Läs ordet vid eldstaden", "Läs båda reglerna", "Skriv bokstäverna som blir kvar"],
+    tagIds: ["tag-003", "tag-001", "tag-007"],
+    puzzleSteps: [
+      {
+        id: "s1",
+        type: "text",
+        prompt: "Följ reglerna från noderna och skriv bokstäverna som blir kvar, utan mellanslag.",
+        answer: "akdn",
+      },
+    ],
+    clues: [
+      { tagId: "tag-003", text: "ORDET ÄR PARKADEN" },
+      { tagId: "tag-001", text: "HOPPA ÖVER VARANNAN BOKSTAV" },
+      { tagId: "tag-007", text: "BÖRJA PÅ ANDRA BOKSTAVEN" },
+    ],
+  },
+  {
+    id: 24,
+    sourceKey: "builtin-24",
+    title: "Symbolnyckeln",
+    type: "SOLO",
+    place: "Fyra noder",
+    xp: 340,
+    difficulty: "MEDEL",
+    description: "Symbolerna och nyckeln sitter på olika noder. Koden finns inte på en enda bricka.",
+    steps: ["Samla de tre symbolvärdena", "Läs vilken ordning scenen kräver", "Skriv siffrorna utan mellanslag"],
+    tagIds: ["tag-001", "tag-004", "tag-009", "tag-008"],
+    puzzleSteps: [
+      {
+        id: "s1",
+        type: "code",
+        prompt: "Översätt symbolerna till siffror och skriv koden utan mellanslag.",
+        answer: "381",
+      },
+    ],
+    clues: [
+      { tagId: "tag-001", text: "STJÄRNA = 3" },
+      { tagId: "tag-004", text: "RUTA = 8" },
+      { tagId: "tag-009", text: "CIRKEL = 1" },
+      { tagId: "tag-008", text: "KODEN ÄR STJÄRNA, SEDAN RUTA, SEDAN CIRKEL" },
+    ],
+  },
+  {
+    id: 25,
+    sourceKey: "builtin-25",
+    title: "Spårkedjan",
+    type: "SOLO",
+    place: "Avslöjas nod för nod",
+    xp: 500,
+    difficulty: "SVÅR",
+    description: "Du får bara se nästa nod. Varje bricka ger en bokstav och pekar vidare. Fel ordning räknas inte.",
+    steps: ["Börja vid utomhusentrén", "Följ hänvisningen på varje bricka", "Skriv ordet som bokstäverna bildar"],
+    tagIds: ["tag-009", "tag-002", "tag-007", "tag-006"],
+    puzzleSteps: [
+      {
+        id: "s1",
+        type: "text",
+        prompt: "Skriv ordet som bokstäverna bildar, i den ordning du fick dem.",
+        answer: "game",
+      },
+    ],
+    clues: [
+      { tagId: "tag-009", text: "Bokstav G. Nästa: soffgruppen i nedre foajén." },
+      { tagId: "tag-002", text: "Bokstav A. Nästa: sällskapsspelen vid gradängen." },
+      { tagId: "tag-007", text: "Bokstav M. Nästa: TV-hörnan." },
+      { tagId: "tag-006", text: "Bokstav E. Det var sista noden." },
+    ],
+    scanInOrder: true,
+  },
+  {
+    id: 26,
+    sourceKey: "builtin-26",
+    title: "Lockbetet",
+    type: "SOLO",
+    place: "Fyra noder",
+    xp: 820,
+    difficulty: "EXPERT",
+    description: "Fyra noder ger siffror, men en av dem är ett lockbete. Regeln som avslöjar fejkaren sitter på en egen bricka.",
+    steps: ["Samla båda första-siffrorna", "Läs den andra siffran", "Läs regeln på scenen och stryk lockbetet"],
+    tagIds: ["tag-002", "tag-006", "tag-004", "tag-008"],
+    puzzleSteps: [{ id: "s1", type: "code", prompt: "Skriv den tvåsiffriga koden.", answer: "49" }],
+    clues: [
+      { tagId: "tag-002", text: "FÖRSTA SIFFRAN: 4" },
+      { tagId: "tag-006", text: "FÖRSTA SIFFRAN: 7" },
+      { tagId: "tag-004", text: "ANDRA SIFFRAN: 9" },
+      {
+        tagId: "tag-008",
+        text: "Den högsta av de två första siffrorna är ett lockbete. Koden är den äkta första siffran direkt följd av den andra.",
+      },
+    ],
+  },
+];
 
 export async function ensureDefaults() {
   const community = db().collection("communityState").doc("default");
@@ -320,20 +596,22 @@ export async function ensureDefaults() {
   const settingsSnap = await settingsRef.get();
   if (!settingsSnap.exists) {
     await settingsRef.set({
-      simulateNfcEnabled: true,
+      simulateNfcEnabled: false,
       unlocks: DEFAULT_COMMUNITY_UNLOCKS,
       progressionVersion: PROGRESSION_VERSION,
       updatedAt: nowIso(),
     } satisfies GameSettings);
-  } else if (Number(settingsSnap.data()?.progressionVersion || 0) < PROGRESSION_VERSION) {
-    await settingsRef.set(
-      {
-        unlocks: DEFAULT_COMMUNITY_UNLOCKS,
-        progressionVersion: PROGRESSION_VERSION,
-        updatedAt: nowIso(),
-      },
-      { merge: true },
-    );
+  } else {
+    const patch: Record<string, unknown> = {};
+    if (Number(settingsSnap.data()?.progressionVersion || 0) < PROGRESSION_VERSION) {
+      patch.unlocks = DEFAULT_COMMUNITY_UNLOCKS;
+      patch.progressionVersion = PROGRESSION_VERSION;
+    }
+    if (settingsSnap.data()?.simulateNfcEnabled !== false) patch.simulateNfcEnabled = false;
+    if (Object.keys(patch).length) {
+      patch.updatedAt = nowIso();
+      await settingsRef.set(patch, { merge: true });
+    }
   }
 
   const tagBatch = db().batch();
@@ -395,6 +673,11 @@ export async function ensureDefaults() {
       if (!Array.isArray(data.tagIds) && meta?.tagIds) patch.tagIds = meta.tagIds;
       if (data.puzzleSteps == null && meta) patch.puzzleSteps = JSON.stringify(meta.puzzleSteps);
       if (data.gameMode == null && meta) patch.gameMode = meta.gameMode;
+      if (meta?.gameMode === "custom" && data.gameMode === "builtin") patch.gameMode = "custom";
+      if (meta?.puzzleSteps?.length && parsePuzzleSteps(data.puzzleSteps).length === 0) {
+        patch.puzzleSteps = JSON.stringify(meta.puzzleSteps);
+        if (meta.gameMode) patch.gameMode = meta.gameMode;
+      }
       if (data.requireScan == null) patch.requireScan = (meta?.tagIds?.length || 0) > 0;
       // Fix known outdated Swedish seed copy without wiping admin edits
       if (data.title === "Community unlock") patch.title = title;
@@ -445,9 +728,124 @@ export async function ensureDefaults() {
   }
   if (extraWrites) await extraBatch.commit();
 
+  const moreBatch = db().batch();
+  let moreWrites = 0;
+  for (const quest of MORE_QUESTS) {
+    const ref = db().collection("quests").doc(String(quest.id));
+    const snap = await ref.get();
+    if (snap.exists) continue;
+    moreBatch.set(ref, {
+      sourceKey: quest.sourceKey,
+      title: quest.title,
+      type: quest.type,
+      place: quest.place,
+      xp: quest.xp,
+      description: quest.description,
+      steps: JSON.stringify(quest.steps),
+      puzzleSteps: JSON.stringify(quest.puzzleSteps),
+      tagIds: quest.tagIds,
+      requireScan: quest.tagIds.length > 0,
+      gameMode: "custom",
+      difficulty: quest.difficulty,
+      scanWindowSeconds: quest.scanWindowSeconds ?? null,
+      scanInOrder: quest.scanInOrder === true,
+      clues: JSON.stringify(quest.clues),
+      unlockMetric: null,
+      unlockAt: null,
+      status: "published",
+      createdBy: "system@goodgame",
+      hintCost: 100,
+      hintText: "",
+      hintImageKey: null,
+      startsAt: null,
+      endsAt: null,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+    moreWrites++;
+  }
+  if (moreWrites) await moreBatch.commit();
+
   const counter = db().collection("counters").doc("quests");
   const counterSnap = await counter.get();
   if (!counterSnap.exists) await counter.set({ value: 100 });
+
+  await patchTidsglitchClock();
+  await patchSecretRoleClues();
+}
+
+const TIDSGLITCH_PROMPT =
+  "Klockan ute visar 19:45, men den synkar inte rätt. Igår den här tiden stod den på 10:30. Vad ska den stå på nu för att gå rätt?";
+
+async function patchTidsglitchClock() {
+  const ref = db().collection("quests").doc("12");
+  const snap = await ref.get();
+  if (!snap.exists) return;
+  const data = snap.data() || {};
+  const steps = parsePuzzleSteps(data.puzzleSteps);
+  const first = steps[0];
+  const patch: Record<string, unknown> = {};
+  const prompt = String(first?.prompt || "");
+  const oldPrompt =
+    first?.type === "choice" ||
+    prompt === "Ange lokal tid just nu." ||
+    prompt.includes("19:45 →") ||
+    prompt.includes("Vilken lokal tid");
+  if (first && oldPrompt && prompt !== TIDSGLITCH_PROMPT) {
+    steps[0] = {
+      id: first.id || "s1",
+      type: "time",
+      prompt: TIDSGLITCH_PROMPT,
+      tagId: first.tagId || "tag-009",
+    };
+    patch.puzzleSteps = JSON.stringify(steps);
+  }
+  const description = String(data.description || "");
+  if (
+    description.includes("ljuger") ||
+    description.includes("just nu") ||
+    description.includes("Ange klockslaget")
+  ) {
+    patch.description =
+      "Uteklockan synkar inte rätt. Räkna ut vad den ska stå på och bekräfta kvällens lösenord.";
+  }
+  let labels: string[] = [];
+  try {
+    const parsed = JSON.parse(String(data.steps || "[]"));
+    if (Array.isArray(parsed)) labels = parsed.map(String);
+  } catch {
+    labels = [];
+  }
+  if (labels.some((label) => label.includes("Tolka tidssignalen") || label === "Ange lokal tid")) {
+    patch.steps = JSON.stringify(
+      labels.map((label) =>
+        label.includes("Tolka tidssignalen") || label === "Ange lokal tid" ? "Räkna ut rätt tid" : label,
+      ),
+    );
+  }
+  if (!Object.keys(patch).length) return;
+  patch.updatedAt = nowIso();
+  await ref.set(patch, { merge: true });
+}
+
+async function patchSecretRoleClues() {
+  const ref = db().collection("quests").doc("9");
+  const snap = await ref.get();
+  if (!snap.exists) return;
+  if (parseClues(snap.data()?.clues).length) return;
+  await ref.set(
+    {
+      clues: JSON.stringify([
+        {
+          tagId: "tag-010",
+          text: "DIN HEMLIGA ROLL: GLITCHEN. Säg det inte högt. Få laget till TV-hörnan.",
+        },
+        { tagId: "tag-006", text: "SLUTKOD VID TV-HÖRNAN: AGENT" },
+      ]),
+      updatedAt: nowIso(),
+    },
+    { merge: true },
+  );
 }
 
 export async function getGameSettings(): Promise<GameSettings> {
@@ -463,7 +861,7 @@ export async function getGameSettings(): Promise<GameSettings> {
       }))
     : DEFAULT_COMMUNITY_UNLOCKS;
   return {
-    simulateNfcEnabled: data.simulateNfcEnabled !== false,
+    simulateNfcEnabled: false,
     unlocks,
     updatedAt: data.updatedAt as string | undefined,
   };
@@ -472,10 +870,7 @@ export async function getGameSettings(): Promise<GameSettings> {
 export async function updateGameSettings(changes: Partial<GameSettings>) {
   const current = await getGameSettings();
   const next: GameSettings = {
-    simulateNfcEnabled:
-      changes.simulateNfcEnabled !== undefined
-        ? Boolean(changes.simulateNfcEnabled)
-        : current.simulateNfcEnabled,
+    simulateNfcEnabled: false,
     unlocks: changes.unlocks ?? current.unlocks,
     updatedAt: nowIso(),
   };
@@ -548,8 +943,13 @@ export async function updateTag(id: string, changes: Partial<NfcTag>) {
 }
 
 export async function verifyStationAccess(stationKey: string, accessCode: string) {
-  const isSim = stationKey === "simulator" || stationKey.startsWith("sim-");
-  if (isSim) return { ok: true as const, tag: null, simulated: true as const };
+  if (!stationKey || stationKey === "simulator" || stationKey.startsWith("sim-")) {
+    return {
+      ok: false as const,
+      error: "Skanna en riktig NFC-bricka eller ange stationskoden på den.",
+      status: 400 as const,
+    };
+  }
   const tag = await getTagByStationKey(stationKey);
   if (!tag || !tag.active) {
     return { ok: false as const, error: "Okänd eller inaktiv station.", status: 404 as const };
@@ -992,6 +1392,33 @@ export async function playerQuestTagScans(name: string, questId: number, tagIds?
   return out;
 }
 
+function scanIsCurrent(scannedAt: string, acceptedMs: number) {
+  if (!acceptedMs) return true;
+  return new Date(scannedAt).getTime() + 1500 >= acceptedMs;
+}
+
+/** Scans, revealed clues and sprint clock for one player. Clues for unscanned nodes are omitted. */
+export async function questRunState(name: string, questId: number) {
+  const quest = await getQuest(questId);
+  const accept = await db().collection("questAcceptances").doc(compositeKey(name, questId)).get();
+  const acceptedAt = accept.exists ? String(accept.data()?.acceptedAt || "") : null;
+  const acceptedMs = acceptedAt ? new Date(acceptedAt).getTime() : 0;
+  const all = await playerQuestTagScans(name, questId, quest?.tagIds);
+  const timed = Boolean(quest?.scanWindowSeconds);
+  const scans = timed ? all.filter((s) => scanIsCurrent(s.scannedAt, acceptedMs)) : all;
+  const seen = new Set(scans.map((s) => s.tagId));
+  const clues = parseClues(quest?.clues).filter((c) => seen.has(c.tagId));
+  return {
+    scans,
+    clues,
+    acceptedAt,
+    scanWindowSeconds: quest?.scanWindowSeconds ?? null,
+    scanInOrder: quest?.scanInOrder === true,
+    requiredTagIds: quest?.tagIds || [],
+    requireScan: quest?.requireScan !== false,
+  };
+}
+
 export async function recordQuestTagScan(input: {
   name: string;
   questId: number;
@@ -999,12 +1426,49 @@ export async function recordQuestTagScan(input: {
   stationKey: string;
 }) {
   const { name, questId, tagId, stationKey } = input;
+  const quest = await getQuest(questId);
+  if (!quest) return { ok: false as const, error: "Uppdraget saknas", status: 404 as const };
+
+  const accept = await db().collection("questAcceptances").doc(compositeKey(name, questId)).get();
+  const acceptedAt = accept.exists ? String(accept.data()?.acceptedAt || "") : "";
+  const acceptedMs = acceptedAt ? new Date(acceptedAt).getTime() : 0;
+  const all = await playerQuestTagScans(name, questId, quest.tagIds);
+  const timed = Boolean(quest.scanWindowSeconds);
+  const active = timed ? all.filter((s) => scanIsCurrent(s.scannedAt, acceptedMs)) : all;
+  const seen = new Set(active.map((s) => s.tagId));
+
+  if (
+    quest.scanWindowSeconds &&
+    acceptedMs &&
+    Date.now() > acceptedMs + quest.scanWindowSeconds * 1000
+  ) {
+    return { ok: false as const, error: "Tiden är ute. Starta om sprinten.", status: 403 as const };
+  }
+
+  if (quest.scanInOrder && !seen.has(tagId)) {
+    const nextId = (quest.tagIds || []).find((id) => !seen.has(id));
+    if (nextId && tagId !== nextId) {
+      return {
+        ok: false as const,
+        error: "Fel nod. Följ hänvisningen till nästa bricka.",
+        status: 400 as const,
+      };
+    }
+  }
+
   const id = compositeKey(name, `${questId}_${tagId}`);
   const ref = db().collection("questTagScans").doc(id);
   let scannedNow = false;
   await db().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
-    if (snap.exists) return;
+    if (snap.exists) {
+      const prev = String(snap.data()?.scannedAt || "");
+      if (timed && acceptedMs && !scanIsCurrent(prev, acceptedMs)) {
+        scannedNow = true;
+        tx.set(ref, { scannedAt: nowIso(), stationKey }, { merge: true });
+      }
+      return;
+    }
     scannedNow = true;
     tx.set(ref, {
       playerName: name,
@@ -1015,10 +1479,15 @@ export async function recordQuestTagScan(input: {
       scannedAt: nowIso(),
     });
   });
-  return { scannedNow, scans: await playerQuestTagScans(name, questId) };
+  const state = await questRunState(name, questId);
+  return { ok: true as const, scannedNow, ...state };
 }
 
-export function validatePuzzleAnswers(steps: PuzzleStep[], answers: { stepId: string; answer: string }[]) {
+export function validatePuzzleAnswers(
+  steps: PuzzleStep[],
+  answers: { stepId: string; answer: string }[],
+  tagCodes?: Map<string, string>,
+) {
   if (!steps.length) return { ok: true as const };
   const map = new Map(answers.map((a) => [a.stepId, a.answer]));
   for (const step of steps) {
@@ -1026,14 +1495,21 @@ export function validatePuzzleAnswers(steps: PuzzleStep[], answers: { stepId: st
     if (given == null || String(given).trim() === "") {
       return { ok: false as const, error: `Steg saknas: ${step.prompt.slice(0, 40)}`, stepId: step.id };
     }
-    if (step.type === "choice") {
+    if (step.type === "time") {
+      if (!matchesClockDigits(String(given), "1030")) {
+        return { ok: false as const, error: "Fel klockslag.", stepId: step.id };
+      }
+    } else if (step.type === "choice") {
       const choice = (step.choices || []).find((c) => c.id === given || c.label === given);
       if (!choice?.correct) {
         return { ok: false as const, error: "Fel svar på flervalsfråga.", stepId: step.id };
       }
     } else {
       const expected = normalizeAnswer(step.answer || "");
-      if (!expected || normalizeAnswer(given) !== expected) {
+      const sticker = step.tagId ? normalizeAccessCode(tagCodes?.get(step.tagId) || "") : "";
+      const matchesAnswer = Boolean(expected) && normalizeAnswer(given) === expected;
+      const matchesSticker = Boolean(sticker) && normalizeAccessCode(given) === sticker;
+      if (!matchesAnswer && !matchesSticker) {
         return { ok: false as const, error: "Fel svar.", stepId: step.id };
       }
     }
@@ -1105,31 +1581,60 @@ export async function completeQuest(input: {
     skipPuzzleCheck &&
     (quest.gameMode === "silence" ||
       (quest.gameMode === "builtin" && (settings.simulateNfcEnabled || questId === 2)));
+  const acceptedAt = String(acceptSnap.data()!.acceptedAt);
+  const acceptedMs = new Date(acceptedAt).getTime();
   const requiredTags =
     !trustBuiltin && quest.requireScan !== false ? quest.tagIds || [] : [];
   if (requiredTags.length) {
-    const scans = await playerQuestTagScans(name, questId, requiredTags);
+    const all = await playerQuestTagScans(name, questId, requiredTags);
+    const scans = quest.scanWindowSeconds
+      ? all.filter((s) => scanIsCurrent(s.scannedAt, acceptedMs))
+      : all;
     const scanned = new Set(scans.map((s) => s.tagId));
     const missing = requiredTags.filter((t) => !scanned.has(t));
     if (missing.length) {
+      const windowMin = Math.max(1, Math.round((quest.scanWindowSeconds || 0) / 60));
       return {
         ok: false as const,
-        error: `Skanna alla NFC-taggar först (${missing.length} kvar).`,
+        error:
+          quest.scanWindowSeconds && all.length >= requiredTags.length
+            ? `Sprinten sprack. Starta om och skanna alla noder inom ${windowMin} minuter.`
+            : `Skanna alla NFC-taggar först (${missing.length} kvar).`,
         status: 403 as const,
       };
+    }
+    if (quest.scanWindowSeconds) {
+      const latest = Math.max(...scans.map((s) => new Date(s.scannedAt).getTime()));
+      if (latest - acceptedMs > quest.scanWindowSeconds * 1000) {
+        return {
+          ok: false as const,
+          error: "Tiden tog slut innan sista noden. Starta om sprinten.",
+          status: 403 as const,
+        };
+      }
+    }
+    if (quest.scanInOrder) {
+      const ordered = [...scans].sort((a, b) => a.scannedAt.localeCompare(b.scannedAt));
+      if (ordered.map((s) => s.tagId).join(",") !== requiredTags.join(",")) {
+        return {
+          ok: false as const,
+          error: "Noderna skannades i fel ordning.",
+          status: 403 as const,
+        };
+      }
     }
   }
 
   const puzzles = parsePuzzleSteps(quest.puzzleSteps);
   if (!skipPuzzleCheck && puzzles.length) {
-    const check = validatePuzzleAnswers(puzzles, answers);
+    const tags = await listTags();
+    const tagCodes = new Map(tags.map((t) => [t.id, t.accessCode]));
+    const check = validatePuzzleAnswers(puzzles, answers, tagCodes);
     if (!check.ok) {
       return { ok: false as const, error: check.error, stepId: check.stepId, status: 400 as const };
     }
   }
 
-  const acceptedAt = String(acceptSnap.data()!.acceptedAt);
-  const acceptedMs = new Date(acceptedAt).getTime();
   const elapsed = Math.max(1, Math.floor((Date.now() - acceptedMs) / 1000));
   const bonus = timeBonus(base, elapsed, target);
   const xp = base + bonus;
@@ -1402,13 +1907,13 @@ export async function recordNfcScan(input: {
       const quest = await getQuest(questId);
       if (!quest?.tagIds?.includes(tag.id)) continue;
       try {
-        await recordQuestTagScan({
+        const result = await recordQuestTagScan({
           name,
           questId,
           tagId: tag.id,
           stationKey: tag.stationKey,
         });
-        questTagProgress = { questId, tagId: tag.id };
+        if (result.ok) questTagProgress = { questId, tagId: tag.id };
       } catch (err) {
         console.error("quest tag scan", questId, err);
       }

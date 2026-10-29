@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import QuestGames from "./QuestGames";
 import CoreQuestGames from "./CoreQuestGames";
 import QuestRunner from "./QuestRunner";
 import MicGate from "./MicGate";
@@ -14,13 +13,12 @@ import { acceptQuest as persistAcceptance, awardQuest } from "./game-progress";
 import XpAwardToast from "./XpAwardToast";
 import CompletionLock from "./CompletionLock";
 import PlayerOnboarding from "./PlayerOnboarding";
-import { getPlayer } from "./player-session";
 import { partySizeForQuest } from "@/lib/types";
 
 type Tag = { id: string; name: string; stationKey: string; location: string };
 type PuzzleStep = {
   id: string;
-  type: "code" | "text" | "choice";
+  type: "code" | "text" | "choice" | "time";
   prompt: string;
   choices?: { id: string; label: string }[];
   tagId?: string | null;
@@ -51,6 +49,9 @@ type Quest = {
   tags?: Tag[];
   requireScan?: boolean;
   gameMode?: string | null;
+  difficulty?: string | null;
+  scanWindowSeconds?: number | null;
+  scanInOrder?: boolean;
   unlocked?: boolean;
   scheduleOk?: boolean;
   scheduleError?: string | null;
@@ -62,14 +63,12 @@ type Quest = {
 const ACCENTS = ["violet", "cyan", "pink", "amber", "green", "orange", "yellow", "red"];
 const ICONS = ["⌁", "⌘", "◇", "⚡", "◉", "⇥", "▦", "△", "?", "◎"];
 
-const ideas = [
-  ["Stafett", "Nästa NFC avslöjas först när lagkamraten klarat sin del."],
-  ["Tyst kommunikation", "Två spelare får varsin halva av en gåta och får inte prata."],
-  ["Minnesglitch", "Se en sekvens i fem sekunder – återskapa den vid nästa station."],
-  ["Falsk nod", "Tre brickor ger ledtrådar, men en av dem ljuger."],
-  ["Hemlig agent", "En spelare får ett dolt sidouppdrag mitt under lagets uppdrag."],
-  ["Community-upplåsning", "Alla deltagares skanningar fyller en gemensam energimätare."],
-];
+function difficultyClass(level: string) {
+  if (level === "LÄTT") return "easy";
+  if (level === "MEDEL") return "mid";
+  if (level === "SVÅR") return "hard";
+  return "expert";
+}
 
 function decorate(q: Quest, index: number): Quest {
   return {
@@ -90,7 +89,6 @@ export default function Home() {
   const [scanOpen, setScanOpen] = useState(false);
   const [silenceOpen, setSilenceOpen] = useState(false);
   const [partyReadyIds, setPartyReadyIds] = useState<number[]>([]);
-  const [simulateNfc, setSimulateNfc] = useState(true);
   const [communityScans, setCommunityScans] = useState(0);
   const [communityXp, setCommunityXp] = useState(0);
   const [micState, setMicState] = useState<"ready" | "running" | "done" | "error">("ready");
@@ -106,7 +104,6 @@ export default function Home() {
       .then((r) => r.json())
       .then((d) => {
         setQuests((d.quests || []).map((q: Quest, i: number) => decorate(q, i)));
-        setSimulateNfc(d.settings?.simulateNfcEnabled !== false);
         setCommunityScans(d.community?.scans || 0);
         setCommunityXp(d.community?.totalXp || 0);
       })
@@ -213,9 +210,7 @@ export default function Home() {
         ? null
         : selected.gameMode === "builtin" && selected.id <= 4
           ? "core"
-          : selected.gameMode === "builtin" && selected.id >= 6
-            ? "legacy"
-            : "custom"
+          : "custom"
       : null;
 
   return (
@@ -304,7 +299,12 @@ export default function Home() {
                   >
                     <div className="quest-top">
                       <span className="quest-icon">{locked || scheduleBlocked ? "◈" : q.icon}</span>
-                      <span className="tag">{q.type}</span>
+                      <span className="quest-flags">
+                        {q.difficulty && (
+                          <span className={`diff diff-${difficultyClass(q.difficulty)}`}>{q.difficulty}</span>
+                        )}
+                        <span className="tag">{q.type}</span>
+                      </span>
                     </div>
                     <h3>{q.title}</h3>
                     <p>
@@ -340,19 +340,6 @@ export default function Home() {
                   </article>
                 );
               })}
-            </section>
-            <section className="idea-section">
-              <p className="eyebrow">FLER SPELMEKANIKER</p>
-              <h2>Quest-idéer för hela byggnaden</h2>
-              <div className="idea-grid">
-                {ideas.map(([title, text], i) => (
-                  <article key={title}>
-                    <span>0{i + 1}</span>
-                    <h3>{title}</h3>
-                    <p>{text}</p>
-                  </article>
-                ))}
-              </div>
             </section>
           </>
         )}
@@ -408,48 +395,16 @@ export default function Home() {
       {activeGame === "core" && selected && (
         <CoreQuestGames
           questId={selected.id}
-          simulateNfc={simulateNfc}
           onClose={() => {
             setSelected(null);
             setPartyReadyIds((ids) => ids.filter((id) => id !== selected.id));
           }}
           onComplete={() => {
             setJoined((c) => (c.includes(selected.id) ? c : [...c, selected.id]));
-            awardQuest(selected, { skipPuzzleCheck: true });
+            return awardQuest(selected, { skipPuzzleCheck: true });
           }}
         />
       )}
-      {activeGame === "legacy" &&
-        selected &&
-        partySizeForQuest(selected.id, selected.type) > 1 &&
-        !partyReadyIds.includes(selected.id) && (
-          <QuestLobby
-            questId={selected.id}
-            questTitle={selected.title}
-            questType={selected.type}
-            requiredPlayers={partySizeForQuest(selected.id, selected.type)}
-            onClose={() => setSelected(null)}
-            onStarted={() =>
-              setPartyReadyIds((ids) => (ids.includes(selected.id) ? ids : [...ids, selected.id]))
-            }
-          />
-        )}
-      {activeGame === "legacy" &&
-        selected &&
-        (partySizeForQuest(selected.id, selected.type) <= 1 ||
-          partyReadyIds.includes(selected.id)) && (
-          <QuestGames
-            questId={selected.id}
-            onClose={() => {
-              setSelected(null);
-              setPartyReadyIds((ids) => ids.filter((id) => id !== selected.id));
-            }}
-            onComplete={() => {
-              setJoined((c) => (c.includes(selected.id) ? c : [...c, selected.id]));
-              awardQuest(selected, { skipPuzzleCheck: true });
-            }}
-          />
-        )}
       {activeGame === "custom" &&
         selected &&
         partySizeForQuest(selected.id, selected.type) > 1 &&
@@ -471,7 +426,6 @@ export default function Home() {
           partyReadyIds.includes(selected.id)) && (
           <QuestRunner
             quest={selected}
-            simulateNfcEnabled={simulateNfc}
             onClose={() => {
               setSelected(null);
               setPartyReadyIds((ids) => ids.filter((id) => id !== selected.id));
@@ -491,7 +445,8 @@ export default function Home() {
             </button>
             <span className="quest-icon large">{selected.icon}</span>
             <p className="eyebrow">
-              {selected.type === "LAG" ? "LAGUPPDRAG" : selected.type === "EVENT" ? "EVENT" : "SOLOUPPDRAG"} · {selected.xp} grund-Chip + tidsbonus
+              {selected.type === "LAG" ? "LAGUPPDRAG" : selected.type === "EVENT" ? "EVENT" : "SOLOUPPDRAG"}
+              {selected.difficulty ? ` · ${selected.difficulty}` : ""} · {selected.xp} grund-Chip + tidsbonus
             </p>
             <h2>{selected.title}</h2>
             <p>{selected.description}</p>
@@ -500,21 +455,39 @@ export default function Home() {
                 <li key={s}>{s}</li>
               ))}
             </ol>
-            {(selected.tags || []).length > 0 && (
+            {selected.scanInOrder ? (
               <div className="time-xp-note">
-                <b>⌁ {(selected.tags || []).length} NFC-TAGGAR</b>
+                <b>⌁ KEDJA · {(selected.tags || []).length} NODER</b>
                 <span>
-                  {(selected.tags || []).map((t) => t.name).join(" · ")}
+                  Börja vid {(selected.tags || [])[0]?.name || "första noden"}. Nästa plats står på brickan.
+                </span>
+              </div>
+            ) : (
+              (selected.tags || []).length > 0 && (
+                <div className="time-xp-note">
+                  <b>⌁ {(selected.tags || []).length} NFC-TAGGAR</b>
+                  <span>
+                    {(selected.tags || []).map((t) => t.name).join(" · ")}
+                  </span>
+                </div>
+              )
+            )}
+            {selected.scanWindowSeconds ? (
+              <div className="time-xp-note">
+                <b>⏱ {Math.round(selected.scanWindowSeconds / 60)} MINUTER</b>
+                <span>
+                  Klockan startar när du antar. Alla noder måste vara skannade innan tiden tar slut.
+                </span>
+              </div>
+            ) : (
+              <div className="time-xp-note">
+                <b>⏱ TIDEN STARTAR NÄR DU ANTAR</b>
+                <span>
+                  Snabbare lösning ger upp till 50 % extra Chip. Du behåller alltid uppdragets
+                  grundbelöning.
                 </span>
               </div>
             )}
-            <div className="time-xp-note">
-              <b>⏱ TIDEN STARTAR NÄR DU ANTAR</b>
-              <span>
-                Snabbare lösning ger upp till 50 % extra Chip. Du behåller alltid uppdragets
-                grundbelöning.
-              </span>
-            </div>
             <button className="primary full" onClick={() => acceptQuest(selected)}>
               {selected.gameMode === "silence" || selected.id === 5
                 ? "ANTA & ÖPPNA LAGLOBBY"
@@ -560,35 +533,6 @@ export default function Home() {
             <a className="primary full" href="/scan" style={{ textDecoration: "none" }}>
               INGEN NFC? ANGE STATIONSKOD
             </a>
-            {simulateNfc ? (
-              <button
-                className="ghost full"
-                style={{ marginTop: 10 }}
-                onClick={async () => {
-                  const player = getPlayer();
-                  if (!player) {
-                    window.dispatchEvent(new Event("open-player-profile"));
-                    return;
-                  }
-                  await fetch("/api/community", {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({
-                      playerName: player.name,
-                      stationKey: `sim-${Date.now()}`,
-                      xpGain: 20,
-                    }),
-                  });
-                  window.dispatchEvent(new Event("community-scan"));
-                  window.dispatchEvent(new Event("progress-updated"));
-                  setScanOpen(false);
-                }}
-              >
-                SIMULERA SKANNING · +20 Chip
-              </button>
-            ) : (
-              <p className="error-note">NFC-simulering är avstängd av admin.</p>
-            )}
           </section>
         </div>
       )}
